@@ -20,8 +20,12 @@ import { createConsole, applyPreset } from './components/console';
 
 const params = readParams();
 
+// Save original timer values before clock override
+let savedTimerT = params.t;
+let savedTimerN = params.n;
+
 // CLOCK mode overrides
-const isClockMode = params.app === 'clock';
+let isClockMode = params.app === 'clock';
 if (isClockMode) {
   params.n = 3600;
   params.t = 3600;
@@ -122,6 +126,22 @@ consoleCtrl.onThemeChange = (themeName: string) => {
   consoleCtrl.setAccentColor(getThemeByName(themeName).segmentRGB);
   params.theme = themeName.toLowerCase();
   writeParams(params);
+  // Redraw so hopper/pegs pick up new theme when loop isn't running
+  if (appState === 'idle') {
+    drawIdleFrame();
+  } else if (paused) {
+    renderer.drawFrame(
+      sim.activeParticles,
+      workerRemainingMs / 1000,
+      sim.totalParticles,
+      sim.emittedCount,
+      true,
+      sim.totalTimeMs,
+      undefined,
+      getCs(),
+      getWallClockSec(),
+    );
+  }
 };
 
 consoleCtrl.onCentisecondsToggle = (enabled: boolean) => {
@@ -136,10 +156,54 @@ consoleCtrl.onDurationChange = (sec: number) => {
 };
 
 consoleCtrl.onAppModeChange = (mode: AppMode) => {
+  // Stop any running activity
+  cancelAnimationFrame(rafId);
+  timerBridge.reset();
+  renderer.stopAlarm();
+  renderer.resetHopperFade();
+  renderer.clearStatic();
+  paused = false;
+
+  // Save/restore timer duration across mode switch
+  if (!isClockMode) {
+    savedTimerT = params.t;
+    savedTimerN = params.n;
+  }
+
   params.app = mode;
+  isClockMode = mode === 'clock';
+
+  if (isClockMode) {
+    params.n = 3600;
+    params.t = 3600;
+  } else {
+    params.t = savedTimerT;
+    params.n = savedTimerN;
+  }
   writeParams(params);
-  // Reload to fully reinitialize with new mode
-  window.location.reload();
+
+  // Recreate simulation
+  sim = new Simulation({
+    numRows: params.rows,
+    totalParticles: params.n,
+    totalTimeSec: params.t,
+    rng,
+  });
+  renderer.resize(params.rows);
+  workerRemainingMs = params.t * 1000;
+  clockElapsedOffset = 0;
+
+  if (isClockMode) {
+    startFresh();
+  } else {
+    appState = 'idle';
+    consoleCtrl.setPaused(true);
+    consoleCtrl.setStatus('idle');
+    consoleCtrl.setDurationEnabled(true);
+    consoleCtrl.setTime(params.t * 1000);
+    consoleCtrl.setDuration(params.t);
+    drawIdleFrame();
+  }
 };
 
 consoleCtrl.onGravityChange = (_value: number) => {
@@ -175,6 +239,10 @@ let lastTime: number | null = null;
 let paused = false;
 let rafId = 0;
 let hopperFadeAlpha = 1;
+
+// Snapshot of hopper state when entering stopping (for visible fade)
+let stoppingEmitted = 0;
+let stoppingTotal = 0;
 
 // Rain particles for refill animation
 let rainParticles: { x: number; y: number; vx: number; vy: number; alpha: number; bounces: number }[] = [];
@@ -245,10 +313,14 @@ function stopToIdle(): void {
   paused = false;
   consoleCtrl.setPaused(true); // show Start (▶) button in idle
 
+  // Snapshot hopper state for visible fade-out
+  stoppingEmitted = sim.emittedCount;
+  stoppingTotal = sim.totalParticles;
+
   // Fill stacks with binomial distribution
   renderer.fillStacks(params.rows, params.n);
 
-  // Begin hopper fade-out
+  // Begin hopper fade-out (0.5s)
   renderer.beginHopperFade();
   hopperFadeAlpha = 1;
   appState = 'stopping';
@@ -477,9 +549,9 @@ function frame(now: number): void {
 
   // ── Stopping state (hopper fade-out) ──
   if (appState === 'stopping') {
-    hopperFadeAlpha -= dtSec / 0.3; // 0.3s fade
+    hopperFadeAlpha -= dtSec / 0.5; // 0.5s fade
     renderer.setHopperFadeAlpha(Math.max(0, hopperFadeAlpha));
-    renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1000);
+    renderer.drawFrame([], params.t, stoppingTotal, stoppingEmitted, false, params.t * 1000);
     if (hopperFadeAlpha <= 0) {
       appState = 'idle';
       renderer.resetHopperFade();
@@ -526,4 +598,13 @@ function frame(now: number): void {
 
 // ── Initial start ──
 
-startFresh();
+if (isClockMode) {
+  startFresh(); // Clock auto-starts (real-time display)
+} else {
+  // Timer mode: start in idle, wait for user to press ▶
+  appState = 'idle';
+  consoleCtrl.setPaused(true);
+  consoleCtrl.setStatus('idle');
+  consoleCtrl.setDurationEnabled(true);
+  drawIdleFrame();
+}

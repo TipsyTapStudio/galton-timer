@@ -36,6 +36,7 @@ export interface ConsoleController {
   setThemeName(name: string): void;
   setAccentColor(rgb: [number, number, number]): void;
   setDurationEnabled(enabled: boolean): void;
+  setDuration(sec: number): void;
   closeDrawer(): void;
 }
 
@@ -407,10 +408,15 @@ function injectStyles(): void {
 
     /* ── Duration disabled hint ── */
     .gt-dur-hint {
-      font-size: 9px;
-      color: rgba(255,255,255,0.25);
+      font-size: 10px;
+      color: rgba(255,160,60,0.7);
       letter-spacing: 0.5px;
       margin-left: auto;
+      animation: gt-hint-pulse 2s ease-in-out infinite;
+    }
+    @keyframes gt-hint-pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1.0; }
     }
 
     /* ── Fixed credits ── */
@@ -979,6 +985,11 @@ export function createConsole(
         btn.style.borderColor = accentBorder;
         btn.style.color = accentColor;
       }
+      // Section titles in drawer
+      const titles = drawer.querySelectorAll<HTMLElement>('.gt-section-title');
+      for (const t of titles) {
+        t.style.color = `rgba(${r},${g},${b},0.35)`;
+      }
     },
     setDurationEnabled(enabled: boolean) {
       durSlider.disabled = !enabled;
@@ -987,6 +998,10 @@ export function createConsole(
       durPlusBtn.disabled = !enabled;
       for (const btn of presetBtns) btn.disabled = !enabled;
       durHint.style.display = enabled ? 'none' : '';
+    },
+    setDuration(sec: number) {
+      durSlider.value = String(sec);
+      durDisplay.value = String(sec);
     },
     closeDrawer,
   };

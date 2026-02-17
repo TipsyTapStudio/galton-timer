@@ -1702,10 +1702,15 @@
 
     /* \u2500\u2500 Duration disabled hint \u2500\u2500 */
     .gt-dur-hint {
-      font-size: 9px;
-      color: rgba(255,255,255,0.25);
+      font-size: 10px;
+      color: rgba(255,160,60,0.7);
       letter-spacing: 0.5px;
       margin-left: auto;
+      animation: gt-hint-pulse 2s ease-in-out infinite;
+    }
+    @keyframes gt-hint-pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1.0; }
     }
 
     /* \u2500\u2500 Fixed credits \u2500\u2500 */
@@ -2189,6 +2194,10 @@
           btn.style.borderColor = accentBorder;
           btn.style.color = accentColor;
         }
+        const titles = drawer.querySelectorAll(".gt-section-title");
+        for (const t of titles) {
+          t.style.color = `rgba(${r},${g},${b},0.35)`;
+        }
       },
       setDurationEnabled(enabled) {
         durSlider.disabled = !enabled;
@@ -2197,6 +2206,10 @@
         durPlusBtn.disabled = !enabled;
         for (const btn of presetBtns) btn.disabled = !enabled;
         durHint.style.display = enabled ? "none" : "";
+      },
+      setDuration(sec) {
+        durSlider.value = String(sec);
+        durDisplay.value = String(sec);
       },
       closeDrawer
     };
@@ -2216,6 +2229,8 @@
 
   // src/main.ts
   var params = readParams();
+  var savedTimerT = params.t;
+  var savedTimerN = params.n;
   var isClockMode = params.app === "clock";
   if (isClockMode) {
     params.n = 3600;
@@ -2284,6 +2299,21 @@
     consoleCtrl.setAccentColor(getThemeByName(themeName).segmentRGB);
     params.theme = themeName.toLowerCase();
     writeParams(params);
+    if (appState === "idle") {
+      drawIdleFrame();
+    } else if (paused) {
+      renderer.drawFrame(
+        sim.activeParticles,
+        workerRemainingMs / 1e3,
+        sim.totalParticles,
+        sim.emittedCount,
+        true,
+        sim.totalTimeMs,
+        void 0,
+        getCs(),
+        getWallClockSec()
+      );
+    }
   };
   consoleCtrl.onCentisecondsToggle = (enabled) => {
     params.cs = enabled;
@@ -2295,9 +2325,46 @@
     if (appState === "idle") drawIdleFrame();
   };
   consoleCtrl.onAppModeChange = (mode) => {
+    cancelAnimationFrame(rafId);
+    timerBridge.reset();
+    renderer.stopAlarm();
+    renderer.resetHopperFade();
+    renderer.clearStatic();
+    paused = false;
+    if (!isClockMode) {
+      savedTimerT = params.t;
+      savedTimerN = params.n;
+    }
     params.app = mode;
+    isClockMode = mode === "clock";
+    if (isClockMode) {
+      params.n = 3600;
+      params.t = 3600;
+    } else {
+      params.t = savedTimerT;
+      params.n = savedTimerN;
+    }
     writeParams(params);
-    window.location.reload();
+    sim = new Simulation({
+      numRows: params.rows,
+      totalParticles: params.n,
+      totalTimeSec: params.t,
+      rng
+    });
+    renderer.resize(params.rows);
+    workerRemainingMs = params.t * 1e3;
+    clockElapsedOffset = 0;
+    if (isClockMode) {
+      startFresh();
+    } else {
+      appState = "idle";
+      consoleCtrl.setPaused(true);
+      consoleCtrl.setStatus("idle");
+      consoleCtrl.setDurationEnabled(true);
+      consoleCtrl.setTime(params.t * 1e3);
+      consoleCtrl.setDuration(params.t);
+      drawIdleFrame();
+    }
   };
   consoleCtrl.onGravityChange = (_value) => {
   };
@@ -2324,6 +2391,8 @@
   var paused = false;
   var rafId = 0;
   var hopperFadeAlpha = 1;
+  var stoppingEmitted = 0;
+  var stoppingTotal = 0;
   var rainParticles = [];
   var refillElapsed = 0;
   function getCs() {
@@ -2382,6 +2451,8 @@
     renderer.stopAlarm();
     paused = false;
     consoleCtrl.setPaused(true);
+    stoppingEmitted = sim.emittedCount;
+    stoppingTotal = sim.totalParticles;
     renderer.fillStacks(params.rows, params.n);
     renderer.beginHopperFade();
     hopperFadeAlpha = 1;
@@ -2575,9 +2646,9 @@
       return;
     }
     if (appState === "stopping") {
-      hopperFadeAlpha -= dtSec / 0.3;
+      hopperFadeAlpha -= dtSec / 0.5;
       renderer.setHopperFadeAlpha(Math.max(0, hopperFadeAlpha));
-      renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1e3);
+      renderer.drawFrame([], params.t, stoppingTotal, stoppingEmitted, false, params.t * 1e3);
       if (hopperFadeAlpha <= 0) {
         appState = "idle";
         renderer.resetHopperFade();
@@ -2616,6 +2687,14 @@
       drawIdleFrame();
     }
   }
-  startFresh();
+  if (isClockMode) {
+    startFresh();
+  } else {
+    appState = "idle";
+    consoleCtrl.setPaused(true);
+    consoleCtrl.setStatus("idle");
+    consoleCtrl.setDurationEnabled(true);
+    drawIdleFrame();
+  }
 })();
 //# sourceMappingURL=bundle.js.map
