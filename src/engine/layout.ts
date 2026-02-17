@@ -252,6 +252,18 @@ export function computeHopperGrains(
     y -= rowH;
     row++;
   }
+
+  // Sort by distance from outlet center (descending).
+  // Grains nearest the outlet are at the END of the array, so they
+  // disappear first as `visibleCount` shrinks — creating a V-shaped funnel.
+  const outletX = cx;
+  const outletY = L.hopperBottom;
+  grains.sort((a, b) => {
+    const da = (a.x - outletX) ** 2 + (a.y - outletY) ** 2;
+    const db = (b.x - outletX) ** 2 + (b.y - outletY) ** 2;
+    return db - da; // farthest first
+  });
+
   return grains;
 }
 

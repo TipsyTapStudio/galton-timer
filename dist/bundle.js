@@ -710,6 +710,13 @@
       y -= rowH;
       row++;
     }
+    const outletX = cx;
+    const outletY = L.hopperBottom;
+    grains.sort((a, b) => {
+      const da = (a.x - outletX) ** 2 + (a.y - outletY) ** 2;
+      const db = (b.x - outletX) ** 2 + (b.y - outletY) ** 2;
+      return db - da;
+    });
     return grains;
   }
   function stackJitterX(bin, k, maxJitter) {
