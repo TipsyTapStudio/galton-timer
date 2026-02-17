@@ -458,6 +458,9 @@ function frame(now: number): void {
     getWallClockSec(),
   );
 
+  // Ensure QR stays rendered while drawer is open
+  consoleCtrl.ensureQR();
+
   if (!sim.allSettled) {
     rafId = requestAnimationFrame(frame);
   } else {

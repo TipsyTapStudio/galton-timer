@@ -3770,10 +3770,7 @@
     startBtn.addEventListener("click", () => ctrl.onStart?.());
     pauseBtn.addEventListener("click", () => ctrl.onPause?.());
     stopBtn.addEventListener("click", () => ctrl.onStop?.());
-    settingsBtn.addEventListener("click", () => {
-      toggleDrawer();
-      setTimeout(() => renderQR(), 150);
-    });
+    settingsBtn.addEventListener("click", () => toggleDrawer());
     controls.appendChild(startBtn);
     controls.appendChild(pauseBtn);
     controls.appendChild(stopBtn);
@@ -4095,29 +4092,34 @@
     resetBtn.addEventListener("click", () => ctrl.onResetDefaults?.());
     sysSection.appendChild(resetBtn);
     drawerContent.appendChild(sysSection);
+    const FALLBACK_URL = "https://tipsytapstudio.github.io/galton-timer/";
+    const QR_OPTS = { width: 140, margin: 2, color: { dark: "#000000", light: "#ffffff" } };
     const qrSection = document.createElement("div");
-    qrSection.style.marginTop = "24px";
-    qrSection.style.paddingTop = "20px";
-    qrSection.style.borderTop = "1px solid #333";
-    qrSection.style.display = "flex";
-    qrSection.style.flexDirection = "column";
-    qrSection.style.alignItems = "center";
-    qrSection.style.gap = "10px";
+    qrSection.id = "qr-container";
+    qrSection.style.cssText = "margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px";
     const qrLabel = document.createElement("span");
     qrLabel.textContent = "Scan to open";
-    qrLabel.style.fontSize = "9px";
-    qrLabel.style.color = "#888";
-    qrLabel.style.letterSpacing = "1px";
+    qrLabel.style.cssText = "font-size:9px;color:#888;letter-spacing:1px";
     qrSection.appendChild(qrLabel);
     const qrCanvas = document.createElement("canvas");
+    qrCanvas.id = "qr-canvas";
     qrSection.appendChild(qrCanvas);
     drawerContent.appendChild(qrSection);
-    const FALLBACK_URL = "https://tipsytapstudio.github.io/galton-timer/";
+    let lastQRUrl = "";
     function renderQR() {
+      const container2 = document.getElementById("qr-container");
+      if (!container2) return;
+      let canvas = document.getElementById("qr-canvas");
+      if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.id = "qr-canvas";
+        container2.appendChild(canvas);
+      }
       const url = window.location.href || FALLBACK_URL;
-      const opts = { width: 140, margin: 2, color: { dark: "#000000", light: "#ffffff" } };
-      import_qrcode.default.toCanvas(qrCanvas, url, opts).catch(() => {
-        import_qrcode.default.toCanvas(qrCanvas, FALLBACK_URL, opts).catch(() => {
+      if (url === lastQRUrl && canvas.width > 0) return;
+      lastQRUrl = url;
+      import_qrcode.default.toCanvas(canvas, url, QR_OPTS).catch(() => {
+        import_qrcode.default.toCanvas(canvas, FALLBACK_URL, QR_OPTS).catch(() => {
         });
       });
     }
@@ -4131,6 +4133,7 @@
       overlay.classList.toggle("open", drawerOpen);
       if (drawerOpen) {
         syncPhysicsSliders();
+        setTimeout(renderQR, 50);
       }
     }
     function closeDrawer() {
@@ -4183,7 +4186,10 @@
           btn.style.color = accentColor;
         }
       },
-      closeDrawer
+      closeDrawer,
+      ensureQR() {
+        if (drawerOpen) renderQR();
+      }
     };
     startBtn.style.display = "none";
     return ctrl;
@@ -4544,6 +4550,7 @@
       getCs(),
       getWallClockSec()
     );
+    consoleCtrl.ensureQR();
     if (!sim.allSettled) {
       rafId = requestAnimationFrame(frame);
     } else {

@@ -37,6 +37,8 @@ export interface ConsoleController {
   setThemeName(name: string): void;
   setAccentColor(rgb: [number, number, number]): void;
   closeDrawer(): void;
+  /** Re-render QR if drawer is open (call from main loop) */
+  ensureQR(): void;
 }
 
 // ── Styles ──
@@ -477,10 +479,7 @@ export function createConsole(
   startBtn.addEventListener('click', () => ctrl.onStart?.());
   pauseBtn.addEventListener('click', () => ctrl.onPause?.());
   stopBtn.addEventListener('click', () => ctrl.onStop?.());
-  settingsBtn.addEventListener('click', () => {
-    toggleDrawer();
-    setTimeout(() => renderQR(), 150);
-  });
+  settingsBtn.addEventListener('click', () => toggleDrawer());
 
   controls.appendChild(startBtn);
   controls.appendChild(pauseBtn);
@@ -856,34 +855,43 @@ export function createConsole(
 
   drawerContent.appendChild(sysSection);
 
-  // ── QR CODE section ──
+  // ── QR CODE section (sanctified container — never destroyed) ──
+  const FALLBACK_URL = 'https://tipsytapstudio.github.io/galton-timer/';
+  const QR_OPTS = { width: 140, margin: 2, color: { dark: '#000000', light: '#ffffff' } };
+
   const qrSection = document.createElement('div');
-  qrSection.style.marginTop = '24px';
-  qrSection.style.paddingTop = '20px';
-  qrSection.style.borderTop = '1px solid #333';
-  qrSection.style.display = 'flex';
-  qrSection.style.flexDirection = 'column';
-  qrSection.style.alignItems = 'center';
-  qrSection.style.gap = '10px';
+  qrSection.id = 'qr-container';
+  qrSection.style.cssText = 'margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px';
 
   const qrLabel = document.createElement('span');
   qrLabel.textContent = 'Scan to open';
-  qrLabel.style.fontSize = '9px';
-  qrLabel.style.color = '#888';
-  qrLabel.style.letterSpacing = '1px';
+  qrLabel.style.cssText = 'font-size:9px;color:#888;letter-spacing:1px';
   qrSection.appendChild(qrLabel);
 
   const qrCanvas = document.createElement('canvas');
+  qrCanvas.id = 'qr-canvas';
   qrSection.appendChild(qrCanvas);
   drawerContent.appendChild(qrSection);
 
-  const FALLBACK_URL = 'https://tipsytapstudio.github.io/galton-timer/';
+  let lastQRUrl = '';
 
   function renderQR(): void {
+    // Ensure canvas is still in the container; re-attach if detached
+    const container = document.getElementById('qr-container');
+    if (!container) return;
+    let canvas = document.getElementById('qr-canvas') as HTMLCanvasElement | null;
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.id = 'qr-canvas';
+      container.appendChild(canvas);
+    }
+
     const url = window.location.href || FALLBACK_URL;
-    const opts = { width: 140, margin: 2, color: { dark: '#000000', light: '#ffffff' } };
-    QRCode.toCanvas(qrCanvas, url, opts).catch(() => {
-      QRCode.toCanvas(qrCanvas, FALLBACK_URL, opts).catch(() => {});
+    if (url === lastQRUrl && canvas.width > 0) return; // already drawn
+    lastQRUrl = url;
+
+    QRCode.toCanvas(canvas, url, QR_OPTS).catch(() => {
+      QRCode.toCanvas(canvas!, FALLBACK_URL, QR_OPTS).catch(() => {});
     });
   }
 
@@ -898,7 +906,7 @@ export function createConsole(
     drawerOpen = !drawerOpen;
     drawer.classList.toggle('open', drawerOpen);
     overlay.classList.toggle('open', drawerOpen);
-    if (drawerOpen) { syncPhysicsSliders(); }
+    if (drawerOpen) { syncPhysicsSliders(); setTimeout(renderQR, 50); }
   }
 
   function closeDrawer(): void {
@@ -950,6 +958,9 @@ export function createConsole(
       }
     },
     closeDrawer,
+    ensureQR() {
+      if (drawerOpen) renderQR();
+    },
   };
 
   startBtn.style.display = 'none';
