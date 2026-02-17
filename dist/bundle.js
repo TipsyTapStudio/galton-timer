@@ -712,10 +712,17 @@
     }
     const outletX = cx;
     const outletY = L.hopperBottom;
+    const totalH = L.hopperBottom - L.hopperTop;
     grains.sort((a, b) => {
-      const da = (a.x - outletX) ** 2 + (a.y - outletY) ** 2;
-      const db = (b.x - outletX) ** 2 + (b.y - outletY) ** 2;
-      return db - da;
+      const tA = (outletY - a.y) / totalH;
+      const tB = (outletY - b.y) / totalH;
+      const hwA = gaussianHW(a.y, L) || 1;
+      const hwB = gaussianHW(b.y, L) || 1;
+      const hA = Math.abs(a.x - outletX) / hwA;
+      const hB = Math.abs(b.x - outletX) / hwB;
+      const scoreA = tA + hA * 0.6;
+      const scoreB = tB + hB * 0.6;
+      return scoreB - scoreA;
     });
     return grains;
   }

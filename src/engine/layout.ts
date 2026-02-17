@@ -253,15 +253,29 @@ export function computeHopperGrains(
     row++;
   }
 
-  // Sort by distance from outlet center (descending).
-  // Grains nearest the outlet are at the END of the array, so they
-  // disappear first as `visibleCount` shrinks — creating a V-shaped funnel.
+  // Sort so grains nearest the outlet disappear first (V-shaped funnel).
+  // Drawing renders index 0..visibleCount-1, so the END of the array
+  // vanishes first as remaining count decreases.
+  //
+  // Cone-angle metric: grains directly above the outlet vanish earliest.
+  // atan2-based "cone distance" prioritizes the vertical column above the nozzle.
   const outletX = cx;
   const outletY = L.hopperBottom;
+  const totalH = L.hopperBottom - L.hopperTop;
   grains.sort((a, b) => {
-    const da = (a.x - outletX) ** 2 + (a.y - outletY) ** 2;
-    const db = (b.x - outletX) ** 2 + (b.y - outletY) ** 2;
-    return db - da; // farthest first
+    // Normalized vertical distance from outlet (0=at outlet, 1=at top)
+    const tA = (outletY - a.y) / totalH;
+    const tB = (outletY - b.y) / totalH;
+    // Horizontal offset from center, normalized by half-width at that height
+    const hwA = gaussianHW(a.y, L) || 1;
+    const hwB = gaussianHW(b.y, L) || 1;
+    const hA = Math.abs(a.x - outletX) / hwA; // 0=center, 1=edge
+    const hB = Math.abs(b.x - outletX) / hwB;
+    // Cone score: lower = closer to outlet center column
+    // Vertical closeness (inverted) + horizontal centering
+    const scoreA = tA + hA * 0.6;
+    const scoreB = tB + hB * 0.6;
+    return scoreB - scoreA; // highest score first (farthest), lowest last (nearest)
   });
 
   return grains;
