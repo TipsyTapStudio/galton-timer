@@ -4070,6 +4070,7 @@
       currentFriction = 1;
       applyFriction(1);
       syncPhysicsSliders();
+      renderQR();
     });
     physSection.appendChild(physResetBtn);
     function syncPhysicsSliders() {
@@ -4093,12 +4094,16 @@
       setTimeout(() => {
         shareBtn.textContent = "Share URL";
       }, 1500);
+      renderQR();
     });
     sysSection.appendChild(shareBtn);
     const resetBtn = document.createElement("button");
     resetBtn.className = "gt-sys-btn";
     resetBtn.textContent = "Reset to Default";
-    resetBtn.addEventListener("click", () => ctrl.onResetDefaults?.());
+    resetBtn.addEventListener("click", () => {
+      ctrl.onResetDefaults?.();
+      renderQR();
+    });
     sysSection.appendChild(resetBtn);
     drawerContent.appendChild(sysSection);
     const qrSection = document.createElement("div");
@@ -4118,18 +4123,15 @@
     const qrCanvas = document.createElement("canvas");
     qrSection.appendChild(qrCanvas);
     drawerContent.appendChild(qrSection);
-    let qrPending = false;
-    function renderQR() {
-      if (qrPending) return;
-      qrPending = true;
-      requestAnimationFrame(() => {
-        qrPending = false;
-        if (!drawerOpen) return;
-        import_qrcode.default.toCanvas(qrCanvas, window.location.href, {
-          width: 140,
-          margin: 2,
-          color: { dark: "#000000", light: "#ffffff" }
-        });
+    function renderQR(attempt = 0) {
+      if (!qrCanvas.isConnected && attempt < 5) {
+        setTimeout(() => renderQR(attempt + 1), 100);
+        return;
+      }
+      import_qrcode.default.toCanvas(qrCanvas, window.location.href, {
+        width: 140,
+        margin: 2,
+        color: { dark: "#000000", light: "#ffffff" }
       });
     }
     drawer.appendChild(drawerContent);

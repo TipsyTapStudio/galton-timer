@@ -825,6 +825,7 @@ export function createConsole(
     currentFriction = 1.0;
     applyFriction(1.0);
     syncPhysicsSliders();
+    renderQR();
   });
   physSection.appendChild(physResetBtn);
 
@@ -851,13 +852,14 @@ export function createConsole(
     ctrl.onShareURL?.();
     shareBtn.textContent = 'Copied!';
     setTimeout(() => { shareBtn.textContent = 'Share URL'; }, 1500);
+    renderQR();
   });
   sysSection.appendChild(shareBtn);
 
   const resetBtn = document.createElement('button');
   resetBtn.className = 'gt-sys-btn';
   resetBtn.textContent = 'Reset to Default';
-  resetBtn.addEventListener('click', () => ctrl.onResetDefaults?.());
+  resetBtn.addEventListener('click', () => { ctrl.onResetDefaults?.(); renderQR(); });
   sysSection.appendChild(resetBtn);
 
   drawerContent.appendChild(sysSection);
@@ -883,18 +885,15 @@ export function createConsole(
   qrSection.appendChild(qrCanvas);
   drawerContent.appendChild(qrSection);
 
-  let qrPending = false;
-  function renderQR(): void {
-    if (qrPending) return;
-    qrPending = true;
-    requestAnimationFrame(() => {
-      qrPending = false;
-      if (!drawerOpen) return;
-      QRCode.toCanvas(qrCanvas, window.location.href, {
-        width: 140,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-      });
+  function renderQR(attempt = 0): void {
+    if (!qrCanvas.isConnected && attempt < 5) {
+      setTimeout(() => renderQR(attempt + 1), 100);
+      return;
+    }
+    QRCode.toCanvas(qrCanvas, window.location.href, {
+      width: 140,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
     });
   }
 
