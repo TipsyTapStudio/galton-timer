@@ -59,4 +59,10 @@ Zeit ist keine bloße Zahl. Sie ist eine physische Akkumulation von Momenten. GA
 - **CYBER**: Electric blue for a high-tech night. / 深い夜に映えるネオンブルー。
 
 ---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
 **Crafted by Tipsy Tap Studio**
