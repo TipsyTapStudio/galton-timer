@@ -734,6 +734,8 @@
       this.hopperGrainCache = [];
       /** Topmost grain Y (minimum Y in cache). */
       this.hopperGrainTopY = 0;
+      // ── Hopper fade (for stop→idle transition) ──
+      this.hopperFadeAlpha = 1;
       // ── Purge drain animation ──
       this.purgeOffsets = [];
       this.purgeVelocities = [];
@@ -836,6 +838,7 @@
     drawHopper(ctx, L, emitted, total) {
       const cx = L.centerX;
       ctx.save();
+      ctx.globalAlpha = this.hopperFadeAlpha;
       const visTop = Math.max(0, L.hopperTop);
       ctx.strokeStyle = "rgba(255,255,255,0.08)";
       ctx.lineWidth = 0.5;
@@ -1070,6 +1073,39 @@
       this.sCtx.clearRect(0, 0, L.width, L.height);
       this.purging = false;
     }
+    // ── Hopper fade helpers ──
+    beginHopperFade() {
+      this.hopperFadeAlpha = 1;
+    }
+    setHopperFadeAlpha(a) {
+      this.hopperFadeAlpha = a;
+    }
+    resetHopperFade() {
+      this.hopperFadeAlpha = 1;
+    }
+    /** Fill stacks with binomial distribution (for stop→idle). */
+    fillStacks(L, numRows, totalParticles, theme) {
+      const n = numRows;
+      const numBins = n + 1;
+      this.binCounts = new Array(numBins).fill(0);
+      const lnFact = new Array(n + 1);
+      lnFact[0] = 0;
+      for (let i = 1; i <= n; i++) {
+        lnFact[i] = lnFact[i - 1] + Math.log(i);
+      }
+      let placed = 0;
+      const probs = new Array(numBins);
+      for (let k = 0; k < numBins; k++) {
+        probs[k] = Math.exp(lnFact[n] - lnFact[k] - lnFact[n - k] - n * Math.LN2);
+      }
+      for (let k = 0; k < numBins; k++) {
+        this.binCounts[k] = Math.round(probs[k] * totalParticles);
+        placed += this.binCounts[k];
+      }
+      const centerBin = Math.floor(numBins / 2);
+      this.binCounts[centerBin] += totalParticles - placed;
+      this.rebakeStatic(L, theme);
+    }
     /** Ground height based on nearest bin's grain count. */
     getGroundY(L, x) {
       const numBins = L.numRows + 1;
@@ -1226,6 +1262,19 @@
     }
     purgeStacks(dt) {
       return this.gr.purgeStacks(this.layout, dt, this.currentTheme);
+    }
+    // ── Hopper fade ──
+    beginHopperFade() {
+      this.gr.beginHopperFade();
+    }
+    setHopperFadeAlpha(a) {
+      this.gr.setHopperFadeAlpha(a);
+    }
+    resetHopperFade() {
+      this.gr.resetHopperFade();
+    }
+    fillStacks(numRows, totalParticles) {
+      this.gr.fillStacks(this.layout, numRows, totalParticles, this.currentTheme);
     }
     // ── Alarm ──
     startAlarm() {
@@ -1625,6 +1674,36 @@
       background: rgba(255,255,255,0.08);
     }
 
+    /* \u2500\u2500 Duration preset buttons \u2500\u2500 */
+    .gt-preset-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .gt-preset-btn {
+      flex: 1;
+      padding: 6px 0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: transparent;
+      color: #aaa;
+      font-size: 11px;
+      font-family: monospace;
+      cursor: pointer;
+      min-height: 32px;
+    }
+    .gt-preset-btn:hover { border-color: #888; color: #fff; }
+    .gt-preset-btn.active { border-color: currentColor; color: currentColor; background: rgba(255,255,255,0.05); }
+    .gt-preset-btn:disabled { opacity: 0.3; cursor: default; }
+
+    /* \u2500\u2500 Duration disabled hint \u2500\u2500 */
+    .gt-dur-hint {
+      font-size: 9px;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: 0.5px;
+      margin-left: auto;
+    }
+
     /* \u2500\u2500 Fixed credits \u2500\u2500 */
     .gt-credits {
       position: fixed;
@@ -1761,6 +1840,7 @@
       const v = parseInt(durSlider.value, 10);
       currentDuration = v;
       durDisplay.value = fmtMmSs(v);
+      presetBtns.forEach((b) => b.classList.remove("active"));
       ctrl.onDurationChange?.(v);
     });
     durDisplay.addEventListener("change", () => {
@@ -1798,7 +1878,36 @@
     durRow.appendChild(durSlider);
     durRow.appendChild(durDisplay);
     durRow.appendChild(durPlusBtn);
+    const durHint = document.createElement("span");
+    durHint.className = "gt-dur-hint";
+    durHint.textContent = "Stop to change";
+    durHint.style.display = "none";
+    durLabel.appendChild(durHint);
+    const presetRow = document.createElement("div");
+    presetRow.className = "gt-preset-row";
+    const PRESETS_DUR = [
+      { label: "3m", sec: 180 },
+      { label: "5m", sec: 300 },
+      { label: "10m", sec: 600 },
+      { label: "30m", sec: 1800 },
+      { label: "60m", sec: 3600 }
+    ];
+    const presetBtns = [];
+    for (const p of PRESETS_DUR) {
+      const btn = document.createElement("button");
+      btn.className = "gt-preset-btn";
+      btn.textContent = p.label;
+      if (p.sec === currentDuration) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        setDuration(p.sec);
+        presetBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      });
+      presetRow.appendChild(btn);
+      presetBtns.push(btn);
+    }
     timerSection.appendChild(durLabel);
+    timerSection.appendChild(presetRow);
     timerSection.appendChild(durRow);
     const csRow = document.createElement("div");
     csRow.className = "gt-field-row";
@@ -1834,6 +1943,7 @@
     function updateClockModeVisibility() {
       const isClock = appSelect.value === "clock";
       durLabel.style.display = isClock ? "none" : "";
+      presetRow.style.display = isClock ? "none" : "";
       durRow.style.display = isClock ? "none" : "";
       csRow.style.display = isClock ? "none" : "";
     }
@@ -2076,6 +2186,14 @@
           btn.style.color = accentColor;
         }
       },
+      setDurationEnabled(enabled) {
+        durSlider.disabled = !enabled;
+        durDisplay.disabled = !enabled;
+        durMinusBtn.disabled = !enabled;
+        durPlusBtn.disabled = !enabled;
+        for (const btn of presetBtns) btn.disabled = !enabled;
+        durHint.style.display = enabled ? "none" : "";
+      },
       closeDrawer
     };
     startBtn.style.display = "none";
@@ -2187,7 +2305,7 @@
     if (paused) togglePause();
     else if (appState === "idle" || sim.allSettled) startTheLoop();
   };
-  consoleCtrl.onStop = () => startTheLoop();
+  consoleCtrl.onStop = () => stopToIdle();
   consoleCtrl.onShareURL = () => {
     writeParams(params);
     navigator.clipboard.writeText(window.location.href).catch(() => {
@@ -2200,6 +2318,7 @@
   var lastTime = null;
   var paused = false;
   var rafId = 0;
+  var hopperFadeAlpha = 1;
   var rainParticles = [];
   var refillElapsed = 0;
   function getCs() {
@@ -2213,7 +2332,7 @@
     return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
   }
   function togglePause() {
-    if (appState === "purging" || appState === "refilling") return;
+    if (appState === "purging" || appState === "refilling" || appState === "stopping") return;
     if (sim.allSettled) return;
     paused = !paused;
     consoleCtrl.setPaused(paused);
@@ -2246,6 +2365,22 @@
     renderer.beginPurge();
     appState = "purging";
     consoleCtrl.setStatus("ending");
+    consoleCtrl.setDurationEnabled(false);
+    lastTime = null;
+    rafId = requestAnimationFrame(frame);
+  }
+  function stopToIdle() {
+    cancelAnimationFrame(rafId);
+    timerBridge.reset();
+    renderer.stopAlarm();
+    paused = false;
+    consoleCtrl.setPaused(false);
+    renderer.fillStacks(params.rows, params.n);
+    renderer.beginHopperFade();
+    hopperFadeAlpha = 1;
+    appState = "stopping";
+    consoleCtrl.setStatus("idle");
+    consoleCtrl.setDurationEnabled(true);
     lastTime = null;
     rafId = requestAnimationFrame(frame);
   }
@@ -2278,6 +2413,7 @@
     consoleCtrl.setPaused(false);
     consoleCtrl.setStatus("ready");
     consoleCtrl.setTime(params.t * 1e3);
+    consoleCtrl.setDurationEnabled(false);
     setTimeout(() => {
       if (appState === "running") {
         consoleCtrl.setStatus("running");
@@ -2338,7 +2474,7 @@
       cancelAnimationFrame(rafId);
     } else {
       if (appState !== "running") {
-        if (appState === "purging" || appState === "refilling") {
+        if (appState === "purging" || appState === "refilling" || appState === "stopping") {
           lastTime = null;
           rafId = requestAnimationFrame(frame);
         }
@@ -2416,6 +2552,18 @@
       renderer.drawFrame([], params.t, sim.totalParticles, 0, false, sim.totalTimeMs, rainParticles);
       if (refillElapsed >= 800) {
         startFresh();
+        return;
+      }
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
+    if (appState === "stopping") {
+      hopperFadeAlpha -= dtSec / 0.3;
+      renderer.setHopperFadeAlpha(Math.max(0, hopperFadeAlpha));
+      renderer.drawFrame([], 0, sim.totalParticles, sim.totalParticles, false, sim.totalTimeMs);
+      if (hopperFadeAlpha <= 0) {
+        appState = "idle";
+        renderer.resetHopperFade();
         return;
       }
       rafId = requestAnimationFrame(frame);

@@ -155,7 +155,7 @@ consoleCtrl.onStart = () => {
   if (paused) togglePause();      // resume if paused
   else if (appState === 'idle' || sim.allSettled) startTheLoop(); // restart
 };
-consoleCtrl.onStop = () => startTheLoop();
+consoleCtrl.onStop = () => stopToIdle();
 
 consoleCtrl.onShareURL = () => {
   writeParams(params);
@@ -168,11 +168,12 @@ consoleCtrl.onResetDefaults = () => {
 
 // ── State ──
 
-type AppState = 'running' | 'paused' | 'purging' | 'refilling' | 'idle';
+type AppState = 'running' | 'paused' | 'purging' | 'refilling' | 'stopping' | 'idle';
 let appState: AppState = 'idle';
 let lastTime: number | null = null;
 let paused = false;
 let rafId = 0;
+let hopperFadeAlpha = 1;
 
 // Rain particles for refill animation
 let rainParticles: { x: number; y: number; vx: number; vy: number; alpha: number; bounces: number }[] = [];
@@ -193,7 +194,7 @@ function getWallClockSec(): number | undefined {
 }
 
 function togglePause(): void {
-  if (appState === 'purging' || appState === 'refilling') return;
+  if (appState === 'purging' || appState === 'refilling' || appState === 'stopping') return;
   if (sim.allSettled) return;
 
   paused = !paused;
@@ -229,6 +230,27 @@ function startTheLoop(): void {
   renderer.beginPurge();
   appState = 'purging';
   consoleCtrl.setStatus('ending');
+  consoleCtrl.setDurationEnabled(false);
+  lastTime = null;
+  rafId = requestAnimationFrame(frame);
+}
+
+function stopToIdle(): void {
+  cancelAnimationFrame(rafId);
+  timerBridge.reset();
+  renderer.stopAlarm();
+  paused = false;
+  consoleCtrl.setPaused(false);
+
+  // Fill stacks with binomial distribution
+  renderer.fillStacks(params.rows, params.n);
+
+  // Begin hopper fade-out
+  renderer.beginHopperFade();
+  hopperFadeAlpha = 1;
+  appState = 'stopping';
+  consoleCtrl.setStatus('idle');
+  consoleCtrl.setDurationEnabled(true);
   lastTime = null;
   rafId = requestAnimationFrame(frame);
 }
@@ -266,6 +288,7 @@ function startFresh(): void {
   consoleCtrl.setPaused(false);
   consoleCtrl.setStatus('ready');
   consoleCtrl.setTime(params.t * 1000);
+  consoleCtrl.setDurationEnabled(false);
 
   setTimeout(() => {
     if (appState === 'running') {
@@ -345,7 +368,7 @@ document.addEventListener('visibilitychange', () => {
     cancelAnimationFrame(rafId);
   } else {
     if (appState !== 'running') {
-      if (appState === 'purging' || appState === 'refilling') {
+      if (appState === 'purging' || appState === 'refilling' || appState === 'stopping') {
         lastTime = null;
         rafId = requestAnimationFrame(frame);
       }
@@ -433,6 +456,20 @@ function frame(now: number): void {
     if (refillElapsed >= 800) {
       startFresh();
       return;
+    }
+    rafId = requestAnimationFrame(frame);
+    return;
+  }
+
+  // ── Stopping state (hopper fade-out) ──
+  if (appState === 'stopping') {
+    hopperFadeAlpha -= dtSec / 0.3; // 0.3s fade
+    renderer.setHopperFadeAlpha(Math.max(0, hopperFadeAlpha));
+    renderer.drawFrame([], 0, sim.totalParticles, sim.totalParticles, false, sim.totalTimeMs);
+    if (hopperFadeAlpha <= 0) {
+      appState = 'idle';
+      renderer.resetHopperFade();
+      return; // idle — stop loop
     }
     rafId = requestAnimationFrame(frame);
     return;

@@ -38,6 +38,9 @@ export class GrainRenderer {
   /** Topmost grain Y (minimum Y in cache). */
   private hopperGrainTopY = 0;
 
+  // ── Hopper fade (for stop→idle transition) ──
+  private hopperFadeAlpha = 1;
+
   // ── Purge drain animation ──
   private purgeOffsets: number[] = [];
   private purgeVelocities: number[] = [];
@@ -166,6 +169,7 @@ export class GrainRenderer {
     const cx = L.centerX;
 
     ctx.save();
+    ctx.globalAlpha = this.hopperFadeAlpha;
 
     // ── Funnel outline (Gaussian curve) ──
     const visTop = Math.max(0, L.hopperTop);
@@ -460,6 +464,53 @@ export class GrainRenderer {
     this.binCounts.fill(0);
     this.sCtx.clearRect(0, 0, L.width, L.height);
     this.purging = false;
+  }
+
+  // ── Hopper fade helpers ──
+
+  beginHopperFade(): void {
+    this.hopperFadeAlpha = 1;
+  }
+
+  setHopperFadeAlpha(a: number): void {
+    this.hopperFadeAlpha = a;
+  }
+
+  resetHopperFade(): void {
+    this.hopperFadeAlpha = 1;
+  }
+
+  /** Fill stacks with binomial distribution (for stop→idle). */
+  fillStacks(L: Layout, numRows: number, totalParticles: number, theme: ClockTheme): void {
+    // Compute binomial expected counts: C(n,k) / 2^n * total
+    const n = numRows;
+    const numBins = n + 1;
+    this.binCounts = new Array(numBins).fill(0);
+
+    // Use log-space to avoid overflow for large n
+    // ln(C(n,k)) = ln(n!) - ln(k!) - ln((n-k)!)
+    const lnFact: number[] = new Array(n + 1);
+    lnFact[0] = 0;
+    for (let i = 1; i <= n; i++) {
+      lnFact[i] = lnFact[i - 1] + Math.log(i);
+    }
+
+    let placed = 0;
+    const probs: number[] = new Array(numBins);
+    for (let k = 0; k < numBins; k++) {
+      probs[k] = Math.exp(lnFact[n] - lnFact[k] - lnFact[n - k] - n * Math.LN2);
+    }
+
+    // Distribute particles proportionally
+    for (let k = 0; k < numBins; k++) {
+      this.binCounts[k] = Math.round(probs[k] * totalParticles);
+      placed += this.binCounts[k];
+    }
+    // Fix rounding errors by adjusting the center bin
+    const centerBin = Math.floor(numBins / 2);
+    this.binCounts[centerBin] += totalParticles - placed;
+
+    this.rebakeStatic(L, theme);
   }
 
   /** Ground height based on nearest bin's grain count. */

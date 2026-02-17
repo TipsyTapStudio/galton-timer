@@ -202,6 +202,24 @@ export class Renderer {
     return this.gr.purgeStacks(this.layout, dt, this.currentTheme);
   }
 
+  // ── Hopper fade ──
+
+  beginHopperFade(): void {
+    this.gr.beginHopperFade();
+  }
+
+  setHopperFadeAlpha(a: number): void {
+    this.gr.setHopperFadeAlpha(a);
+  }
+
+  resetHopperFade(): void {
+    this.gr.resetHopperFade();
+  }
+
+  fillStacks(numRows: number, totalParticles: number): void {
+    this.gr.fillStacks(this.layout, numRows, totalParticles, this.currentTheme);
+  }
+
   // ── Alarm ──
 
   startAlarm(): void {

@@ -35,6 +35,7 @@ export interface ConsoleController {
   setPaused(paused: boolean): void;
   setThemeName(name: string): void;
   setAccentColor(rgb: [number, number, number]): void;
+  setDurationEnabled(enabled: boolean): void;
   closeDrawer(): void;
 }
 
@@ -382,6 +383,36 @@ function injectStyles(): void {
       background: rgba(255,255,255,0.08);
     }
 
+    /* ── Duration preset buttons ── */
+    .gt-preset-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .gt-preset-btn {
+      flex: 1;
+      padding: 6px 0;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: transparent;
+      color: #aaa;
+      font-size: 11px;
+      font-family: monospace;
+      cursor: pointer;
+      min-height: 32px;
+    }
+    .gt-preset-btn:hover { border-color: #888; color: #fff; }
+    .gt-preset-btn.active { border-color: currentColor; color: currentColor; background: rgba(255,255,255,0.05); }
+    .gt-preset-btn:disabled { opacity: 0.3; cursor: default; }
+
+    /* ── Duration disabled hint ── */
+    .gt-dur-hint {
+      font-size: 9px;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: 0.5px;
+      margin-left: auto;
+    }
+
     /* ── Fixed credits ── */
     .gt-credits {
       position: fixed;
@@ -566,6 +597,7 @@ export function createConsole(
     const v = parseInt(durSlider.value, 10);
     currentDuration = v;
     durDisplay.value = fmtMmSs(v);
+    presetBtns.forEach(b => b.classList.remove('active'));
     ctrl.onDurationChange?.(v);
   });
 
@@ -600,7 +632,40 @@ export function createConsole(
   durRow.appendChild(durDisplay);
   durRow.appendChild(durPlusBtn);
 
+  // "Stop to change" hint (hidden by default)
+  const durHint = document.createElement('span');
+  durHint.className = 'gt-dur-hint';
+  durHint.textContent = 'Stop to change';
+  durHint.style.display = 'none';
+  durLabel.appendChild(durHint);
+
+  // Duration preset buttons
+  const presetRow = document.createElement('div');
+  presetRow.className = 'gt-preset-row';
+  const PRESETS_DUR = [
+    { label: '3m', sec: 180 },
+    { label: '5m', sec: 300 },
+    { label: '10m', sec: 600 },
+    { label: '30m', sec: 1800 },
+    { label: '60m', sec: 3600 },
+  ];
+  const presetBtns: HTMLButtonElement[] = [];
+  for (const p of PRESETS_DUR) {
+    const btn = document.createElement('button');
+    btn.className = 'gt-preset-btn';
+    btn.textContent = p.label;
+    if (p.sec === currentDuration) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      setDuration(p.sec);
+      presetBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    presetRow.appendChild(btn);
+    presetBtns.push(btn);
+  }
+
   timerSection.appendChild(durLabel);
+  timerSection.appendChild(presetRow);
   timerSection.appendChild(durRow);
 
   // Centiseconds (hidden in clock mode)
@@ -642,6 +707,7 @@ export function createConsole(
   function updateClockModeVisibility(): void {
     const isClock = appSelect.value === 'clock';
     durLabel.style.display = isClock ? 'none' : '';
+    presetRow.style.display = isClock ? 'none' : '';
     durRow.style.display = isClock ? 'none' : '';
     csRow.style.display = isClock ? 'none' : '';
   }
@@ -913,6 +979,14 @@ export function createConsole(
         btn.style.borderColor = accentBorder;
         btn.style.color = accentColor;
       }
+    },
+    setDurationEnabled(enabled: boolean) {
+      durSlider.disabled = !enabled;
+      durDisplay.disabled = !enabled;
+      durMinusBtn.disabled = !enabled;
+      durPlusBtn.disabled = !enabled;
+      for (const btn of presetBtns) btn.disabled = !enabled;
+      durHint.style.display = enabled ? 'none' : '';
     },
     closeDrawer,
   };
