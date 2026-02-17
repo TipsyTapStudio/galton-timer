@@ -7,7 +7,6 @@
 
 import { PRESETS, PHYSICS, PhysicsParams } from '../engine/simulation';
 import { CLOCK_THEMES } from '../engine/seven-seg';
-import { generateQRSvg } from '../utils/qr-svg';
 import type { AppMode } from '../utils/url-params';
 
 // ── Types ──
@@ -830,8 +829,7 @@ export function createConsole(
 
   drawerContent.appendChild(physSection);
 
-  // ── SYSTEM section (with QR code baked into template) ──
-  const _qrSvg = generateQRSvg('https://tipsytapstudio.github.io/galton-timer/', 140);
+  // ── SYSTEM section ──
   const sysSection = document.createElement('div');
   sysSection.className = 'gt-section';
   sysSection.innerHTML = `<div class="gt-section-title">System</div>`;
@@ -852,13 +850,6 @@ export function createConsole(
   resetBtn.addEventListener('click', () => ctrl.onResetDefaults?.());
   sysSection.appendChild(resetBtn);
 
-  // Inject QR code directly into sysSection's innerHTML (part of the template)
-  sysSection.insertAdjacentHTML('beforeend',
-    `<div style="margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px">` +
-    `<span style="font-size:9px;color:#888;letter-spacing:1px">Scan to open (Mobile)</span>` +
-    `<div style="width:140px;height:140px;border-radius:4px;overflow:hidden">${_qrSvg}</div>` +
-    `</div>`
-  );
   drawerContent.appendChild(sysSection);
 
   drawer.appendChild(drawerContent);

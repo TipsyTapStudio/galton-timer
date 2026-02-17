@@ -35,6 +35,8 @@ export class GrainRenderer {
 
   /** Hopper grain positions (pre-computed). */
   private hopperGrainCache: HopperGrain[] = [];
+  /** Topmost grain Y (minimum Y in cache). */
+  private hopperGrainTopY = 0;
 
   // ── Purge drain animation ──
   private purgeOffsets: number[] = [];
@@ -87,6 +89,13 @@ export class GrainRenderer {
     this.sCtx.clearRect(0, 0, w, h);
 
     this.hopperGrainCache = computeHopperGrains(L, totalParticles, L.miniGrainR);
+
+    // Find actual top of grain pile (min Y in cache)
+    let minY = L.hopperBottom;
+    for (const g of this.hopperGrainCache) {
+      if (g.y < minY) minY = g.y;
+    }
+    this.hopperGrainTopY = minY;
   }
 
   getBinCounts(): number[] {
@@ -180,29 +189,35 @@ export class GrainRenderer {
     ctx.closePath();
     ctx.stroke();
 
-    // ── Grain fill: parabolic surface clipping ──
-    // Instead of drawing first N grains, we compute a U-shaped "water surface"
-    // that drops as grains are emitted. Only grains below the surface are drawn.
+    // ── Grain fill: bowl-shaped surface clipping ──
+    // Center sinks early (concave curve), edges follow later (convex curve).
+    // The bowl shape is maintained throughout, shrinking as sand depletes.
     const remaining = Math.max(0, total - emitted);
     const cacheLen = this.hopperGrainCache.length;
 
     if (remaining > 0 && cacheLen > 0) {
       const r = L.miniGrainR;
       const ratio = remaining / total;  // 1.0 = full, 0.0 = empty
+      const progress = 1 - ratio;       // 0.0 = full, 1.0 = empty
 
-      // Surface line: surfaceY(x) defines the top of the sand at horizontal position x.
-      // As ratio decreases, the surface drops (surfaceY increases = lower on screen).
-      // The center drops faster than edges → U-shape (parabolic).
-      const hopperH = L.hopperBottom - L.hopperTop;
+      // Use actual grain pile top, not hopperTop (grains may not reach hopper ceiling)
+      const grainTop = this.hopperGrainTopY;
+      const grainH = L.hopperBottom - grainTop;
       const topHW = L.hopperTopHW;
 
-      // baseLevel: overall surface height. At ratio=1 it's above the hopper top;
-      // at ratio=0 it's below the hopper bottom.
-      const baseLevel = L.hopperTop + hopperH * (1 - ratio) * 1.15;
+      // Volumetric correction: cone-shaped container holds most volume at the top.
+      // Removing fraction `progress` of grains lowers fill height by 1-(1-p)^(1/3).
+      const volP = 1 - Math.pow(1 - progress, 1 / 3);
 
-      // Bowl depth: how much deeper the center is compared to edges.
-      // Increases as sand depletes (more dramatic U-shape).
-      const bowlDepth = hopperH * 0.35 * (1 - ratio);
+      // Center drops with volumetric height, edges follow with delay
+      const centerDrop = volP * grainH * 1.1;
+      const edgeDrop = Math.pow(volP, 2.0) * grainH * 1.1;
+      // Bowl depth = difference between center and edge drop
+      const bowlDepth = centerDrop - edgeDrop;
+
+      // Surface noise amplitude: roughens the boundary for a granular look.
+      // Scales with grain radius so it's subtle but visible.
+      const noiseAmp = r * 3.5;
 
       // Glow pass (batched)
       ctx.fillStyle = this.grainGlowFill;
@@ -210,11 +225,13 @@ export class GrainRenderer {
       for (let i = 0; i < cacheLen; i++) {
         const g = this.hopperGrainCache[i];
         if (g.y < -r * 3) continue;
-        // Normalized horizontal offset from center: 0=center, 1=edge
-        const off = Math.min(1, Math.abs(g.x - cx) / topHW);
-        // Parabolic surface: center is deeper (higher Y), edges are higher (lower Y)
-        const surfaceY = baseLevel - bowlDepth * (off * off);
-        if (g.y < surfaceY) continue;  // grain is above surface → hidden
+        // Use local half-width so the bowl curve is visible at every row
+        const localHW = gaussianHW(g.y, L);
+        const off = Math.min(1, Math.abs(g.x - cx) / localHW);
+        // Deterministic per-grain noise (hash-based, no flicker)
+        const noise = (((i * 2654435761) >>> 0) % 10000 / 10000 - 0.5) * noiseAmp;
+        const surfaceY = grainTop + edgeDrop + bowlDepth * (1 - off * off) + noise;
+        if (g.y < surfaceY) continue;
         ctx.moveTo(g.x + r * GRAIN_GLOW_SCALE, g.y);
         ctx.arc(g.x, g.y, r * GRAIN_GLOW_SCALE, 0, PI2);
       }
@@ -226,8 +243,10 @@ export class GrainRenderer {
       for (let i = 0; i < cacheLen; i++) {
         const g = this.hopperGrainCache[i];
         if (g.y < -r) continue;
-        const off = Math.min(1, Math.abs(g.x - cx) / topHW);
-        const surfaceY = baseLevel - bowlDepth * (off * off);
+        const localHW = gaussianHW(g.y, L);
+        const off = Math.min(1, Math.abs(g.x - cx) / localHW);
+        const noise = (((i * 2654435761) >>> 0) % 10000 / 10000 - 0.5) * noiseAmp;
+        const surfaceY = grainTop + edgeDrop + bowlDepth * (1 - off * off) + noise;
         if (g.y < surfaceY) continue;
         ctx.moveTo(g.x + r, g.y);
         ctx.arc(g.x, g.y, r, 0, PI2);

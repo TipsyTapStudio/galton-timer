@@ -252,36 +252,6 @@ export function computeHopperGrains(
     y -= rowH;
     row++;
   }
-
-  // Sort for smooth U-shaped (parabolic) bowl depletion.
-  // Center sinks as a gentle curve, not a sharp V-cut.
-  //
-  // Score = height + (1 - xOffset²) * bowlDepth + noise
-  // The x² term creates a parabolic cross-section: center grains get
-  // the largest boost, edges get almost none, and the transition is smooth.
-  const totalH = L.hopperBottom - L.hopperTop || 1;
-  const bowlDepth = 0.35; // how much deeper the center sinks vs edges
-
-  grains.sort((a, b) => {
-    const hA = (L.hopperBottom - a.y) / totalH;
-    const hB = (L.hopperBottom - b.y) / totalH;
-
-    const hwA = gaussianHW(a.y, L) || 1;
-    const hwB = gaussianHW(b.y, L) || 1;
-    const offA = Math.abs(a.x - cx) / hwA; // 0=center, 1=edge
-    const offB = Math.abs(b.x - cx) / hwB;
-
-    // Parabolic bowl: (1 - off²) is 1 at center, 0 at edge, smooth curve
-    const bowlA = (1 - offA * offA) * bowlDepth;
-    const bowlB = (1 - offB * offB) * bowlDepth;
-
-    // Deterministic noise (~6%)
-    const nA = (((Math.round(a.x * 73) ^ Math.round(a.y * 137)) & 0x7fff) / 0x7fff) * 0.06;
-    const nB = (((Math.round(b.x * 73) ^ Math.round(b.y * 137)) & 0x7fff) / 0x7fff) * 0.06;
-
-    return (hA + bowlA + nA) - (hB + bowlB + nB);
-  });
-
   return grains;
 }
 
