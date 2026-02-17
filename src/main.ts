@@ -29,8 +29,6 @@ let isClockMode = params.app === 'clock';
 if (isClockMode) {
   params.n = 3600;
   params.t = 3600;
-} else if (params.timerMode === 'seconds') {
-  params.n = params.t; // 1:1 sync: one grain per second
 }
 writeParams(params);
 
@@ -52,7 +50,6 @@ const renderer = new Renderer(container, params.rows, params.n, params.s);
 
 renderer.setThemeByName(params.theme);
 renderer.setClockEnabled(params.clock);
-renderer.setGlowIntensity(1.0); // Fixed recommended glow
 
 // ── Apply initial mode preset ──
 
@@ -95,6 +92,9 @@ const consoleCtrl = createConsole(
   params.cs,
   params.app,
   params.friction,
+  params.n,
+  params.rows,
+  params.s,
 );
 
 // Set initial accent color
@@ -155,6 +155,39 @@ consoleCtrl.onDurationChange = (sec: number) => {
   if (appState === 'idle') drawIdleFrame();
 };
 
+consoleCtrl.onParticlesChange = (n: number) => {
+  params.n = n;
+  savedTimerN = n;
+  writeParams(params);
+  if (appState === 'idle') {
+    sim = new Simulation({
+      numRows: params.rows,
+      totalParticles: params.n,
+      totalTimeSec: params.t,
+      rng,
+    });
+    renderer.clearStatic();
+    renderer.resize(params.rows, params.n);
+    drawIdleFrame();
+  }
+};
+
+consoleCtrl.onRowsChange = (rows: number) => {
+  params.rows = rows;
+  writeParams(params);
+  if (appState === 'idle') {
+    sim = new Simulation({
+      numRows: params.rows,
+      totalParticles: params.n,
+      totalTimeSec: params.t,
+      rng,
+    });
+    renderer.clearStatic();
+    renderer.resize(params.rows, params.n);
+    drawIdleFrame();
+  }
+};
+
 consoleCtrl.onAppModeChange = (mode: AppMode) => {
   // Stop any running activity
   cancelAnimationFrame(rafId);
@@ -199,9 +232,11 @@ consoleCtrl.onAppModeChange = (mode: AppMode) => {
     appState = 'idle';
     consoleCtrl.setPaused(true);
     consoleCtrl.setStatus('idle');
-    consoleCtrl.setDurationEnabled(true);
+    consoleCtrl.setConfigEnabled(true);
     consoleCtrl.setTime(params.t * 1000);
     consoleCtrl.setDuration(params.t);
+    consoleCtrl.setParticles(params.n);
+    consoleCtrl.setRows(params.rows);
     drawIdleFrame();
   }
 };
@@ -300,7 +335,7 @@ function startTheLoop(): void {
   appState = 'purging';
   consoleCtrl.setStatus('ending');
   consoleCtrl.setPaused(false);          // show ⏸ during purge/refill
-  consoleCtrl.setDurationEnabled(false);
+  consoleCtrl.setConfigEnabled(false);
   lastTime = null;
   rafId = requestAnimationFrame(frame);
 }
@@ -325,7 +360,7 @@ function stopToIdle(): void {
   hopperFadeAlpha = 1;
   appState = 'stopping';
   consoleCtrl.setStatus('idle');
-  consoleCtrl.setDurationEnabled(true);
+  consoleCtrl.setConfigEnabled(true);
   lastTime = null;
   rafId = requestAnimationFrame(frame);
 }
@@ -372,7 +407,7 @@ function startFresh(): void {
   consoleCtrl.setPaused(false);
   consoleCtrl.setStatus('ready');
   consoleCtrl.setTime(params.t * 1000);
-  consoleCtrl.setDurationEnabled(false);
+  consoleCtrl.setConfigEnabled(false);
 
   setTimeout(() => {
     if (appState === 'running') {
@@ -591,7 +626,7 @@ function frame(now: number): void {
     appState = 'idle';
     consoleCtrl.setStatus('idle');
     consoleCtrl.setPaused(true);        // show ▶
-    consoleCtrl.setDurationEnabled(true);
+    consoleCtrl.setConfigEnabled(true);
     drawIdleFrame();
   }
 }
@@ -605,6 +640,6 @@ if (isClockMode) {
   appState = 'idle';
   consoleCtrl.setPaused(true);
   consoleCtrl.setStatus('idle');
-  consoleCtrl.setDurationEnabled(true);
+  consoleCtrl.setConfigEnabled(true);
   drawIdleFrame();
 }

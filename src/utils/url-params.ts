@@ -1,9 +1,7 @@
 /**
  * URL parameter serialization / deserialization.
- * Format: ?app=timer&t=3600&n=3600&s=42&rows=24&mode=standard&clock=true&theme=nixie&timerMode=classic&glow=1.0&friction=1.0
+ * Format: ?app=timer&t=3600&n=3600&s=42&rows=24&mode=standard&clock=true&theme=nixie&friction=1.0
  */
-
-import type { TimerMode } from '../engine/renderer';
 
 export type AppMode = 'timer' | 'clock';
 
@@ -24,10 +22,6 @@ export interface AppParams {
   clock: boolean;
   /** Color theme name */
   theme: string;
-  /** Timer display mode */
-  timerMode: TimerMode;
-  /** Glow intensity (0-2) */
-  glow: number;
   /** Centiseconds display enabled */
   cs: boolean;
   /** Friction multiplier for drag values */
@@ -36,7 +30,6 @@ export interface AppParams {
 
 const VALID_MODES = ['standard', 'heavy sand', 'techno', 'moon gravity', 'super ball'];
 const VALID_THEMES = ['nixie', 'system', 'studio', 'cyber'];
-const VALID_TIMER_MODES: TimerMode[] = ['classic', 'strict', 'seconds', 'off'];
 const VALID_APP_MODES: AppMode[] = ['timer', 'clock'];
 
 const DEFAULTS: AppParams = {
@@ -48,8 +41,6 @@ const DEFAULTS: AppParams = {
   mode: 'standard',
   clock: false,
   theme: 'nixie',
-  timerMode: 'classic',
-  glow: 1.0,
   cs: true,
   friction: 1.0,
 };
@@ -80,12 +71,6 @@ export function readParams(): AppParams {
   const themeRaw = (sp.get('theme') || DEFAULTS.theme).toLowerCase().trim();
   const theme = VALID_THEMES.includes(themeRaw) ? themeRaw : DEFAULTS.theme;
 
-  const timerModeRaw = (sp.get('timerMode') || DEFAULTS.timerMode).toLowerCase().trim() as TimerMode;
-  const timerMode = VALID_TIMER_MODES.includes(timerModeRaw) ? timerModeRaw : DEFAULTS.timerMode;
-
-  const glowRaw = sp.get('glow');
-  const glow = glowRaw !== null ? Math.max(0, Math.min(2, parseFloat(glowRaw) || DEFAULTS.glow)) : DEFAULTS.glow;
-
   const csRaw = sp.get('cs');
   const cs = csRaw === null ? DEFAULTS.cs : csRaw !== 'false' && csRaw !== '0';
 
@@ -103,8 +88,6 @@ export function readParams(): AppParams {
     mode,
     clock,
     theme,
-    timerMode,
-    glow,
     cs,
     friction,
   };
@@ -120,8 +103,6 @@ export function writeParams(cfg: AppParams): void {
   sp.set('mode', cfg.mode);
   sp.set('clock', String(cfg.clock));
   sp.set('theme', cfg.theme);
-  sp.set('timerMode', cfg.timerMode);
-  sp.set('glow', String(cfg.glow));
   sp.set('cs', String(cfg.cs));
   sp.set('friction', String(cfg.friction));
   const url = `${window.location.pathname}?${sp.toString()}`;

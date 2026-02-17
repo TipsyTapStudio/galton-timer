@@ -10,8 +10,6 @@ import { computeLayout, pegX, pegY } from './layout';
 import type { Layout } from './layout';
 import { GrainRenderer } from './grain-renderer';
 
-export type TimerMode = 'classic' | 'strict' | 'seconds' | 'off';
-
 export class Renderer {
   layout!: Layout;
   private gr: GrainRenderer;
@@ -65,7 +63,8 @@ export class Renderer {
     return this.currentTheme;
   }
 
-  resize(numRows: number): void {
+  resize(numRows: number, totalParticles?: number): void {
+    if (totalParticles !== undefined) this.totalParticles = totalParticles;
     const dpr = window.devicePixelRatio || 1;
     const w = window.innerWidth;
     const h = window.innerHeight;

@@ -25,6 +25,8 @@ export interface ConsoleController {
   onStop: (() => void) | null;
   onThemeChange: ((themeName: string) => void) | null;
   onDurationChange: ((sec: number) => void) | null;
+  onParticlesChange: ((n: number) => void) | null;
+  onRowsChange: ((rows: number) => void) | null;
   onCentisecondsToggle: ((enabled: boolean) => void) | null;
   onResetDefaults: (() => void) | null;
   onShareURL: (() => void) | null;
@@ -35,8 +37,11 @@ export interface ConsoleController {
   setPaused(paused: boolean): void;
   setThemeName(name: string): void;
   setAccentColor(rgb: [number, number, number]): void;
-  setDurationEnabled(enabled: boolean): void;
+  setConfigEnabled(enabled: boolean): void;
   setDuration(sec: number): void;
+  setParticles(n: number): void;
+  setRows(rows: number): void;
+  setSeed(seed: number): void;
   closeDrawer(): void;
 }
 
@@ -464,11 +469,17 @@ export function createConsole(
   initialCs = true,
   initialAppMode: AppMode = 'timer',
   initialFriction = 1.0,
+  initialParticles = 3600,
+  initialRows = 24,
+  initialSeed = 0,
 ): ConsoleController {
   injectStyles();
 
   let isPaused = false;
   let currentDuration = Math.min(initialDurationSec, 3600);
+  let currentParticles = Math.max(10, Math.min(3600, initialParticles));
+  let currentRows = Math.max(4, Math.min(64, initialRows));
+  let currentSeed = initialSeed;
 
   // ═══════════════════════════════════════════════════════════════════
   // FIXED CREDITS
@@ -616,22 +627,22 @@ export function createConsole(
     }
   });
 
-  // +/- hold acceleration
-  let holdInterval: ReturnType<typeof setInterval> | null = null;
-  function startHold(delta: number): void {
-    setDuration(currentDuration + delta);
-    holdInterval = setInterval(() => setDuration(currentDuration + delta), 80);
-  }
-  function stopHold(): void {
-    if (holdInterval !== null) { clearInterval(holdInterval); holdInterval = null; }
+  // +/- hold acceleration helper
+  function makeHold(setter: (d: number) => void) {
+    let iv: ReturnType<typeof setInterval> | null = null;
+    return {
+      start(d: number) { setter(d); iv = setInterval(() => setter(d), 80); },
+      stop() { if (iv) { clearInterval(iv); iv = null; } },
+    };
   }
 
-  durMinusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startHold(-1); });
-  durMinusBtn.addEventListener('pointerup', stopHold);
-  durMinusBtn.addEventListener('pointerleave', stopHold);
-  durPlusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startHold(1); });
-  durPlusBtn.addEventListener('pointerup', stopHold);
-  durPlusBtn.addEventListener('pointerleave', stopHold);
+  const durHold = makeHold((d) => setDuration(currentDuration + d));
+  durMinusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); durHold.start(-1); });
+  durMinusBtn.addEventListener('pointerup', () => durHold.stop());
+  durMinusBtn.addEventListener('pointerleave', () => durHold.stop());
+  durPlusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); durHold.start(1); });
+  durPlusBtn.addEventListener('pointerup', () => durHold.stop());
+  durPlusBtn.addEventListener('pointerleave', () => durHold.stop());
 
   durRow.appendChild(durMinusBtn);
   durRow.appendChild(durSlider);
@@ -674,6 +685,202 @@ export function createConsole(
   timerSection.appendChild(presetRow);
   timerSection.appendChild(durRow);
 
+  // ── Particles control ──
+  const partLabel = document.createElement('div');
+  partLabel.className = 'gt-field-row';
+  partLabel.innerHTML = '<span class="gt-field-label">Particles</span>';
+  partLabel.style.marginBottom = '0';
+
+  const partHint = document.createElement('span');
+  partHint.className = 'gt-dur-hint';
+  partHint.textContent = 'Stop to change';
+  partHint.style.display = 'none';
+  partLabel.appendChild(partHint);
+
+  const partPresetRow = document.createElement('div');
+  partPresetRow.className = 'gt-preset-row';
+  const PRESETS_PART = [
+    { label: '60', val: 60 },
+    { label: '300', val: 300 },
+    { label: '600', val: 600 },
+    { label: '1800', val: 1800 },
+    { label: '3600', val: 3600 },
+  ];
+  const partPresetBtns: HTMLButtonElement[] = [];
+  for (const p of PRESETS_PART) {
+    const btn = document.createElement('button');
+    btn.className = 'gt-preset-btn';
+    btn.textContent = p.label;
+    if (p.val === currentParticles) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      setParticlesVal(p.val);
+      partPresetBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    partPresetRow.appendChild(btn);
+    partPresetBtns.push(btn);
+  }
+
+  const partRow = document.createElement('div');
+  partRow.className = 'gt-dur-row';
+  const partMinusBtn = document.createElement('button');
+  partMinusBtn.className = 'gt-dur-btn';
+  partMinusBtn.textContent = '\u2212';
+  const partSlider = document.createElement('input');
+  partSlider.type = 'range';
+  partSlider.className = 'gt-slider-input';
+  partSlider.min = '10';
+  partSlider.max = '3600';
+  partSlider.step = '1';
+  partSlider.value = String(currentParticles);
+  partSlider.style.flex = '1';
+  const partDisplay = document.createElement('input');
+  partDisplay.className = 'gt-dur-display';
+  partDisplay.type = 'text';
+  partDisplay.value = String(currentParticles);
+  const partPlusBtn = document.createElement('button');
+  partPlusBtn.className = 'gt-dur-btn';
+  partPlusBtn.textContent = '+';
+
+  function setParticlesVal(n: number): void {
+    n = Math.max(10, Math.min(3600, n));
+    currentParticles = n;
+    partSlider.value = String(n);
+    partDisplay.value = String(n);
+    ctrl.onParticlesChange?.(n);
+  }
+
+  partSlider.addEventListener('input', () => {
+    const v = parseInt(partSlider.value, 10);
+    currentParticles = v;
+    partDisplay.value = String(v);
+    partPresetBtns.forEach(b => b.classList.remove('active'));
+    ctrl.onParticlesChange?.(v);
+  });
+  partDisplay.addEventListener('change', () => {
+    const v = parseInt(partDisplay.value, 10);
+    if (Number.isFinite(v)) {
+      setParticlesVal(v);
+    } else {
+      partDisplay.value = String(currentParticles);
+    }
+  });
+
+  const partHold = makeHold((d) => setParticlesVal(currentParticles + d));
+  partMinusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); partHold.start(-1); });
+  partMinusBtn.addEventListener('pointerup', () => partHold.stop());
+  partMinusBtn.addEventListener('pointerleave', () => partHold.stop());
+  partPlusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); partHold.start(1); });
+  partPlusBtn.addEventListener('pointerup', () => partHold.stop());
+  partPlusBtn.addEventListener('pointerleave', () => partHold.stop());
+
+  partRow.appendChild(partMinusBtn);
+  partRow.appendChild(partSlider);
+  partRow.appendChild(partDisplay);
+  partRow.appendChild(partPlusBtn);
+
+  timerSection.appendChild(partLabel);
+  timerSection.appendChild(partPresetRow);
+  timerSection.appendChild(partRow);
+
+  // ── Rows control ──
+  const rowsLabel = document.createElement('div');
+  rowsLabel.className = 'gt-field-row';
+  rowsLabel.innerHTML = '<span class="gt-field-label">Rows</span>';
+  rowsLabel.style.marginBottom = '0';
+
+  const rowsHint = document.createElement('span');
+  rowsHint.className = 'gt-dur-hint';
+  rowsHint.textContent = 'Stop to change';
+  rowsHint.style.display = 'none';
+  rowsLabel.appendChild(rowsHint);
+
+  const rowsPresetRow = document.createElement('div');
+  rowsPresetRow.className = 'gt-preset-row';
+  const PRESETS_ROWS = [
+    { label: '8', val: 8 },
+    { label: '16', val: 16 },
+    { label: '24', val: 24 },
+    { label: '32', val: 32 },
+    { label: '48', val: 48 },
+  ];
+  const rowsPresetBtns: HTMLButtonElement[] = [];
+  for (const p of PRESETS_ROWS) {
+    const btn = document.createElement('button');
+    btn.className = 'gt-preset-btn';
+    btn.textContent = p.label;
+    if (p.val === currentRows) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      setRowsVal(p.val);
+      rowsPresetBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    rowsPresetRow.appendChild(btn);
+    rowsPresetBtns.push(btn);
+  }
+
+  const rowsRow = document.createElement('div');
+  rowsRow.className = 'gt-dur-row';
+  const rowsMinusBtn = document.createElement('button');
+  rowsMinusBtn.className = 'gt-dur-btn';
+  rowsMinusBtn.textContent = '\u2212';
+  const rowsSlider = document.createElement('input');
+  rowsSlider.type = 'range';
+  rowsSlider.className = 'gt-slider-input';
+  rowsSlider.min = '4';
+  rowsSlider.max = '64';
+  rowsSlider.step = '1';
+  rowsSlider.value = String(currentRows);
+  rowsSlider.style.flex = '1';
+  const rowsDisplay = document.createElement('input');
+  rowsDisplay.className = 'gt-dur-display';
+  rowsDisplay.type = 'text';
+  rowsDisplay.value = String(currentRows);
+  const rowsPlusBtn = document.createElement('button');
+  rowsPlusBtn.className = 'gt-dur-btn';
+  rowsPlusBtn.textContent = '+';
+
+  function setRowsVal(r: number): void {
+    r = Math.max(4, Math.min(64, r));
+    currentRows = r;
+    rowsSlider.value = String(r);
+    rowsDisplay.value = String(r);
+    ctrl.onRowsChange?.(r);
+  }
+
+  rowsSlider.addEventListener('input', () => {
+    const v = parseInt(rowsSlider.value, 10);
+    currentRows = v;
+    rowsDisplay.value = String(v);
+    rowsPresetBtns.forEach(b => b.classList.remove('active'));
+    ctrl.onRowsChange?.(v);
+  });
+  rowsDisplay.addEventListener('change', () => {
+    const v = parseInt(rowsDisplay.value, 10);
+    if (Number.isFinite(v)) {
+      setRowsVal(v);
+    } else {
+      rowsDisplay.value = String(currentRows);
+    }
+  });
+
+  const rowsHold = makeHold((d) => setRowsVal(currentRows + d));
+  rowsMinusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); rowsHold.start(-1); });
+  rowsMinusBtn.addEventListener('pointerup', () => rowsHold.stop());
+  rowsMinusBtn.addEventListener('pointerleave', () => rowsHold.stop());
+  rowsPlusBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); rowsHold.start(1); });
+  rowsPlusBtn.addEventListener('pointerup', () => rowsHold.stop());
+  rowsPlusBtn.addEventListener('pointerleave', () => rowsHold.stop());
+
+  rowsRow.appendChild(rowsMinusBtn);
+  rowsRow.appendChild(rowsSlider);
+  rowsRow.appendChild(rowsDisplay);
+  rowsRow.appendChild(rowsPlusBtn);
+
+  timerSection.appendChild(rowsLabel);
+  timerSection.appendChild(rowsPresetRow);
+  timerSection.appendChild(rowsRow);
+
   // Centiseconds (hidden in clock mode)
   const csRow = document.createElement('div');
   csRow.className = 'gt-field-row';
@@ -715,6 +922,12 @@ export function createConsole(
     durLabel.style.display = isClock ? 'none' : '';
     presetRow.style.display = isClock ? 'none' : '';
     durRow.style.display = isClock ? 'none' : '';
+    partLabel.style.display = isClock ? 'none' : '';
+    partPresetRow.style.display = isClock ? 'none' : '';
+    partRow.style.display = isClock ? 'none' : '';
+    rowsLabel.style.display = isClock ? 'none' : '';
+    rowsPresetRow.style.display = isClock ? 'none' : '';
+    rowsRow.style.display = isClock ? 'none' : '';
     csRow.style.display = isClock ? 'none' : '';
   }
   updateClockModeVisibility();
@@ -906,6 +1119,16 @@ export function createConsole(
   sysSection.className = 'gt-section';
   sysSection.innerHTML = `<div class="gt-section-title">System</div>`;
 
+  const seedRow = document.createElement('div');
+  seedRow.className = 'gt-field-row';
+  seedRow.innerHTML = '<span class="gt-field-label">Seed</span>';
+  const seedVal = document.createElement('span');
+  seedVal.className = 'gt-slider-val';
+  seedVal.style.width = 'auto';
+  seedVal.textContent = String(currentSeed);
+  seedRow.appendChild(seedVal);
+  sysSection.appendChild(seedRow);
+
   const shareBtn = document.createElement('button');
   shareBtn.className = 'gt-sys-btn';
   shareBtn.textContent = 'Share URL';
@@ -960,6 +1183,8 @@ export function createConsole(
     onStop: null,
     onThemeChange: null,
     onDurationChange: null,
+    onParticlesChange: null,
+    onRowsChange: null,
     onCentisecondsToggle: null,
     onResetDefaults: null,
     onShareURL: null,
@@ -991,17 +1216,47 @@ export function createConsole(
         t.style.color = `rgba(${r},${g},${b},0.35)`;
       }
     },
-    setDurationEnabled(enabled: boolean) {
+    setConfigEnabled(enabled: boolean) {
+      // Duration
       durSlider.disabled = !enabled;
       durDisplay.disabled = !enabled;
       durMinusBtn.disabled = !enabled;
       durPlusBtn.disabled = !enabled;
       for (const btn of presetBtns) btn.disabled = !enabled;
       durHint.style.display = enabled ? 'none' : '';
+      // Particles
+      partSlider.disabled = !enabled;
+      partDisplay.disabled = !enabled;
+      partMinusBtn.disabled = !enabled;
+      partPlusBtn.disabled = !enabled;
+      for (const btn of partPresetBtns) btn.disabled = !enabled;
+      partHint.style.display = enabled ? 'none' : '';
+      // Rows
+      rowsSlider.disabled = !enabled;
+      rowsDisplay.disabled = !enabled;
+      rowsMinusBtn.disabled = !enabled;
+      rowsPlusBtn.disabled = !enabled;
+      for (const btn of rowsPresetBtns) btn.disabled = !enabled;
+      rowsHint.style.display = enabled ? 'none' : '';
     },
     setDuration(sec: number) {
+      currentDuration = sec;
       durSlider.value = String(sec);
-      durDisplay.value = String(sec);
+      durDisplay.value = fmtMmSs(sec);
+    },
+    setParticles(n: number) {
+      currentParticles = n;
+      partSlider.value = String(n);
+      partDisplay.value = String(n);
+    },
+    setRows(rows: number) {
+      currentRows = rows;
+      rowsSlider.value = String(rows);
+      rowsDisplay.value = String(rows);
+    },
+    setSeed(seed: number) {
+      currentSeed = seed;
+      seedVal.textContent = String(seed);
     },
     closeDrawer,
   };

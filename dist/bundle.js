@@ -3,7 +3,6 @@
   // src/utils/url-params.ts
   var VALID_MODES = ["standard", "heavy sand", "techno", "moon gravity", "super ball"];
   var VALID_THEMES = ["nixie", "system", "studio", "cyber"];
-  var VALID_TIMER_MODES = ["classic", "strict", "seconds", "off"];
   var VALID_APP_MODES = ["timer", "clock"];
   var DEFAULTS = {
     app: "timer",
@@ -15,8 +14,6 @@
     mode: "standard",
     clock: false,
     theme: "nixie",
-    timerMode: "classic",
-    glow: 1,
     cs: true,
     friction: 1
   };
@@ -40,10 +37,6 @@
     const clock = clockRaw === null ? DEFAULTS.clock : clockRaw !== "false" && clockRaw !== "0";
     const themeRaw = (sp.get("theme") || DEFAULTS.theme).toLowerCase().trim();
     const theme = VALID_THEMES.includes(themeRaw) ? themeRaw : DEFAULTS.theme;
-    const timerModeRaw = (sp.get("timerMode") || DEFAULTS.timerMode).toLowerCase().trim();
-    const timerMode = VALID_TIMER_MODES.includes(timerModeRaw) ? timerModeRaw : DEFAULTS.timerMode;
-    const glowRaw = sp.get("glow");
-    const glow = glowRaw !== null ? Math.max(0, Math.min(2, parseFloat(glowRaw) || DEFAULTS.glow)) : DEFAULTS.glow;
     const csRaw = sp.get("cs");
     const cs = csRaw === null ? DEFAULTS.cs : csRaw !== "false" && csRaw !== "0";
     const frictionRaw = sp.get("friction");
@@ -57,8 +50,6 @@
       mode,
       clock,
       theme,
-      timerMode,
-      glow,
       cs,
       friction
     };
@@ -73,8 +64,6 @@
     sp.set("mode", cfg.mode);
     sp.set("clock", String(cfg.clock));
     sp.set("theme", cfg.theme);
-    sp.set("timerMode", cfg.timerMode);
-    sp.set("glow", String(cfg.glow));
     sp.set("cs", String(cfg.cs));
     sp.set("friction", String(cfg.friction));
     const url = `${window.location.pathname}?${sp.toString()}`;
@@ -1160,7 +1149,8 @@
     getTheme() {
       return this.currentTheme;
     }
-    resize(numRows) {
+    resize(numRows, totalParticles) {
+      if (totalParticles !== void 0) this.totalParticles = totalParticles;
       const dpr = window.devicePixelRatio || 1;
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -1744,10 +1734,13 @@
     const v = parseInt(str, 10);
     return Number.isFinite(v) ? v : null;
   }
-  function createConsole(initialMode, initialTheme = "Nixie", initialDurationSec = 3600, initialCs = true, initialAppMode = "timer", initialFriction = 1) {
+  function createConsole(initialMode, initialTheme = "Nixie", initialDurationSec = 3600, initialCs = true, initialAppMode = "timer", initialFriction = 1, initialParticles = 3600, initialRows = 24, initialSeed = 0) {
     injectStyles();
     let isPaused = false;
     let currentDuration = Math.min(initialDurationSec, 3600);
+    let currentParticles = Math.max(10, Math.min(3600, initialParticles));
+    let currentRows = Math.max(4, Math.min(64, initialRows));
+    let currentSeed = initialSeed;
     const creditsEl = document.createElement("div");
     creditsEl.className = "gt-credits";
     creditsEl.textContent = "Crafted by Tipsy Tap Studio";
@@ -1860,29 +1853,34 @@
         durDisplay.value = fmtMmSs(currentDuration);
       }
     });
-    let holdInterval = null;
-    function startHold(delta) {
-      setDuration(currentDuration + delta);
-      holdInterval = setInterval(() => setDuration(currentDuration + delta), 80);
+    function makeHold(setter) {
+      let iv = null;
+      return {
+        start(d) {
+          setter(d);
+          iv = setInterval(() => setter(d), 80);
+        },
+        stop() {
+          if (iv) {
+            clearInterval(iv);
+            iv = null;
+          }
+        }
+      };
     }
-    function stopHold() {
-      if (holdInterval !== null) {
-        clearInterval(holdInterval);
-        holdInterval = null;
-      }
-    }
+    const durHold = makeHold((d) => setDuration(currentDuration + d));
     durMinusBtn.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      startHold(-1);
+      durHold.start(-1);
     });
-    durMinusBtn.addEventListener("pointerup", stopHold);
-    durMinusBtn.addEventListener("pointerleave", stopHold);
+    durMinusBtn.addEventListener("pointerup", () => durHold.stop());
+    durMinusBtn.addEventListener("pointerleave", () => durHold.stop());
     durPlusBtn.addEventListener("pointerdown", (e) => {
       e.preventDefault();
-      startHold(1);
+      durHold.start(1);
     });
-    durPlusBtn.addEventListener("pointerup", stopHold);
-    durPlusBtn.addEventListener("pointerleave", stopHold);
+    durPlusBtn.addEventListener("pointerup", () => durHold.stop());
+    durPlusBtn.addEventListener("pointerleave", () => durHold.stop());
     durRow.appendChild(durMinusBtn);
     durRow.appendChild(durSlider);
     durRow.appendChild(durDisplay);
@@ -1918,6 +1916,194 @@
     timerSection.appendChild(durLabel);
     timerSection.appendChild(presetRow);
     timerSection.appendChild(durRow);
+    const partLabel = document.createElement("div");
+    partLabel.className = "gt-field-row";
+    partLabel.innerHTML = '<span class="gt-field-label">Particles</span>';
+    partLabel.style.marginBottom = "0";
+    const partHint = document.createElement("span");
+    partHint.className = "gt-dur-hint";
+    partHint.textContent = "Stop to change";
+    partHint.style.display = "none";
+    partLabel.appendChild(partHint);
+    const partPresetRow = document.createElement("div");
+    partPresetRow.className = "gt-preset-row";
+    const PRESETS_PART = [
+      { label: "60", val: 60 },
+      { label: "300", val: 300 },
+      { label: "600", val: 600 },
+      { label: "1800", val: 1800 },
+      { label: "3600", val: 3600 }
+    ];
+    const partPresetBtns = [];
+    for (const p of PRESETS_PART) {
+      const btn = document.createElement("button");
+      btn.className = "gt-preset-btn";
+      btn.textContent = p.label;
+      if (p.val === currentParticles) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        setParticlesVal(p.val);
+        partPresetBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      });
+      partPresetRow.appendChild(btn);
+      partPresetBtns.push(btn);
+    }
+    const partRow = document.createElement("div");
+    partRow.className = "gt-dur-row";
+    const partMinusBtn = document.createElement("button");
+    partMinusBtn.className = "gt-dur-btn";
+    partMinusBtn.textContent = "\u2212";
+    const partSlider = document.createElement("input");
+    partSlider.type = "range";
+    partSlider.className = "gt-slider-input";
+    partSlider.min = "10";
+    partSlider.max = "3600";
+    partSlider.step = "1";
+    partSlider.value = String(currentParticles);
+    partSlider.style.flex = "1";
+    const partDisplay = document.createElement("input");
+    partDisplay.className = "gt-dur-display";
+    partDisplay.type = "text";
+    partDisplay.value = String(currentParticles);
+    const partPlusBtn = document.createElement("button");
+    partPlusBtn.className = "gt-dur-btn";
+    partPlusBtn.textContent = "+";
+    function setParticlesVal(n) {
+      n = Math.max(10, Math.min(3600, n));
+      currentParticles = n;
+      partSlider.value = String(n);
+      partDisplay.value = String(n);
+      ctrl.onParticlesChange?.(n);
+    }
+    partSlider.addEventListener("input", () => {
+      const v = parseInt(partSlider.value, 10);
+      currentParticles = v;
+      partDisplay.value = String(v);
+      partPresetBtns.forEach((b) => b.classList.remove("active"));
+      ctrl.onParticlesChange?.(v);
+    });
+    partDisplay.addEventListener("change", () => {
+      const v = parseInt(partDisplay.value, 10);
+      if (Number.isFinite(v)) {
+        setParticlesVal(v);
+      } else {
+        partDisplay.value = String(currentParticles);
+      }
+    });
+    const partHold = makeHold((d) => setParticlesVal(currentParticles + d));
+    partMinusBtn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      partHold.start(-1);
+    });
+    partMinusBtn.addEventListener("pointerup", () => partHold.stop());
+    partMinusBtn.addEventListener("pointerleave", () => partHold.stop());
+    partPlusBtn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      partHold.start(1);
+    });
+    partPlusBtn.addEventListener("pointerup", () => partHold.stop());
+    partPlusBtn.addEventListener("pointerleave", () => partHold.stop());
+    partRow.appendChild(partMinusBtn);
+    partRow.appendChild(partSlider);
+    partRow.appendChild(partDisplay);
+    partRow.appendChild(partPlusBtn);
+    timerSection.appendChild(partLabel);
+    timerSection.appendChild(partPresetRow);
+    timerSection.appendChild(partRow);
+    const rowsLabel = document.createElement("div");
+    rowsLabel.className = "gt-field-row";
+    rowsLabel.innerHTML = '<span class="gt-field-label">Rows</span>';
+    rowsLabel.style.marginBottom = "0";
+    const rowsHint = document.createElement("span");
+    rowsHint.className = "gt-dur-hint";
+    rowsHint.textContent = "Stop to change";
+    rowsHint.style.display = "none";
+    rowsLabel.appendChild(rowsHint);
+    const rowsPresetRow = document.createElement("div");
+    rowsPresetRow.className = "gt-preset-row";
+    const PRESETS_ROWS = [
+      { label: "8", val: 8 },
+      { label: "16", val: 16 },
+      { label: "24", val: 24 },
+      { label: "32", val: 32 },
+      { label: "48", val: 48 }
+    ];
+    const rowsPresetBtns = [];
+    for (const p of PRESETS_ROWS) {
+      const btn = document.createElement("button");
+      btn.className = "gt-preset-btn";
+      btn.textContent = p.label;
+      if (p.val === currentRows) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        setRowsVal(p.val);
+        rowsPresetBtns.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      });
+      rowsPresetRow.appendChild(btn);
+      rowsPresetBtns.push(btn);
+    }
+    const rowsRow = document.createElement("div");
+    rowsRow.className = "gt-dur-row";
+    const rowsMinusBtn = document.createElement("button");
+    rowsMinusBtn.className = "gt-dur-btn";
+    rowsMinusBtn.textContent = "\u2212";
+    const rowsSlider = document.createElement("input");
+    rowsSlider.type = "range";
+    rowsSlider.className = "gt-slider-input";
+    rowsSlider.min = "4";
+    rowsSlider.max = "64";
+    rowsSlider.step = "1";
+    rowsSlider.value = String(currentRows);
+    rowsSlider.style.flex = "1";
+    const rowsDisplay = document.createElement("input");
+    rowsDisplay.className = "gt-dur-display";
+    rowsDisplay.type = "text";
+    rowsDisplay.value = String(currentRows);
+    const rowsPlusBtn = document.createElement("button");
+    rowsPlusBtn.className = "gt-dur-btn";
+    rowsPlusBtn.textContent = "+";
+    function setRowsVal(r) {
+      r = Math.max(4, Math.min(64, r));
+      currentRows = r;
+      rowsSlider.value = String(r);
+      rowsDisplay.value = String(r);
+      ctrl.onRowsChange?.(r);
+    }
+    rowsSlider.addEventListener("input", () => {
+      const v = parseInt(rowsSlider.value, 10);
+      currentRows = v;
+      rowsDisplay.value = String(v);
+      rowsPresetBtns.forEach((b) => b.classList.remove("active"));
+      ctrl.onRowsChange?.(v);
+    });
+    rowsDisplay.addEventListener("change", () => {
+      const v = parseInt(rowsDisplay.value, 10);
+      if (Number.isFinite(v)) {
+        setRowsVal(v);
+      } else {
+        rowsDisplay.value = String(currentRows);
+      }
+    });
+    const rowsHold = makeHold((d) => setRowsVal(currentRows + d));
+    rowsMinusBtn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      rowsHold.start(-1);
+    });
+    rowsMinusBtn.addEventListener("pointerup", () => rowsHold.stop());
+    rowsMinusBtn.addEventListener("pointerleave", () => rowsHold.stop());
+    rowsPlusBtn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      rowsHold.start(1);
+    });
+    rowsPlusBtn.addEventListener("pointerup", () => rowsHold.stop());
+    rowsPlusBtn.addEventListener("pointerleave", () => rowsHold.stop());
+    rowsRow.appendChild(rowsMinusBtn);
+    rowsRow.appendChild(rowsSlider);
+    rowsRow.appendChild(rowsDisplay);
+    rowsRow.appendChild(rowsPlusBtn);
+    timerSection.appendChild(rowsLabel);
+    timerSection.appendChild(rowsPresetRow);
+    timerSection.appendChild(rowsRow);
     const csRow = document.createElement("div");
     csRow.className = "gt-field-row";
     csRow.innerHTML = '<span class="gt-field-label">Centiseconds</span>';
@@ -1954,6 +2140,12 @@
       durLabel.style.display = isClock ? "none" : "";
       presetRow.style.display = isClock ? "none" : "";
       durRow.style.display = isClock ? "none" : "";
+      partLabel.style.display = isClock ? "none" : "";
+      partPresetRow.style.display = isClock ? "none" : "";
+      partRow.style.display = isClock ? "none" : "";
+      rowsLabel.style.display = isClock ? "none" : "";
+      rowsPresetRow.style.display = isClock ? "none" : "";
+      rowsRow.style.display = isClock ? "none" : "";
       csRow.style.display = isClock ? "none" : "";
     }
     updateClockModeVisibility();
@@ -2116,6 +2308,15 @@
     const sysSection = document.createElement("div");
     sysSection.className = "gt-section";
     sysSection.innerHTML = `<div class="gt-section-title">System</div>`;
+    const seedRow = document.createElement("div");
+    seedRow.className = "gt-field-row";
+    seedRow.innerHTML = '<span class="gt-field-label">Seed</span>';
+    const seedVal = document.createElement("span");
+    seedVal.className = "gt-slider-val";
+    seedVal.style.width = "auto";
+    seedVal.textContent = String(currentSeed);
+    seedRow.appendChild(seedVal);
+    sysSection.appendChild(seedRow);
     const shareBtn = document.createElement("button");
     shareBtn.className = "gt-sys-btn";
     shareBtn.textContent = "Share URL";
@@ -2169,6 +2370,8 @@
       onStop: null,
       onThemeChange: null,
       onDurationChange: null,
+      onParticlesChange: null,
+      onRowsChange: null,
       onCentisecondsToggle: null,
       onResetDefaults: null,
       onShareURL: null,
@@ -2199,17 +2402,44 @@
           t.style.color = `rgba(${r},${g},${b},0.35)`;
         }
       },
-      setDurationEnabled(enabled) {
+      setConfigEnabled(enabled) {
         durSlider.disabled = !enabled;
         durDisplay.disabled = !enabled;
         durMinusBtn.disabled = !enabled;
         durPlusBtn.disabled = !enabled;
         for (const btn of presetBtns) btn.disabled = !enabled;
         durHint.style.display = enabled ? "none" : "";
+        partSlider.disabled = !enabled;
+        partDisplay.disabled = !enabled;
+        partMinusBtn.disabled = !enabled;
+        partPlusBtn.disabled = !enabled;
+        for (const btn of partPresetBtns) btn.disabled = !enabled;
+        partHint.style.display = enabled ? "none" : "";
+        rowsSlider.disabled = !enabled;
+        rowsDisplay.disabled = !enabled;
+        rowsMinusBtn.disabled = !enabled;
+        rowsPlusBtn.disabled = !enabled;
+        for (const btn of rowsPresetBtns) btn.disabled = !enabled;
+        rowsHint.style.display = enabled ? "none" : "";
       },
       setDuration(sec) {
+        currentDuration = sec;
         durSlider.value = String(sec);
-        durDisplay.value = String(sec);
+        durDisplay.value = fmtMmSs(sec);
+      },
+      setParticles(n) {
+        currentParticles = n;
+        partSlider.value = String(n);
+        partDisplay.value = String(n);
+      },
+      setRows(rows) {
+        currentRows = rows;
+        rowsSlider.value = String(rows);
+        rowsDisplay.value = String(rows);
+      },
+      setSeed(seed) {
+        currentSeed = seed;
+        seedVal.textContent = String(seed);
       },
       closeDrawer
     };
@@ -2235,8 +2465,6 @@
   if (isClockMode) {
     params.n = 3600;
     params.t = 3600;
-  } else if (params.timerMode === "seconds") {
-    params.n = params.t;
   }
   writeParams(params);
   var rng = createPRNG(params.s);
@@ -2250,7 +2478,6 @@
   var renderer = new Renderer(container, params.rows, params.n, params.s);
   renderer.setThemeByName(params.theme);
   renderer.setClockEnabled(params.clock);
-  renderer.setGlowIntensity(1);
   applyPreset(params.mode);
   var timerBridge = new TimerBridge();
   var workerRemainingMs = params.t * 1e3;
@@ -2276,7 +2503,10 @@
     params.t,
     params.cs,
     params.app,
-    params.friction
+    params.friction,
+    params.n,
+    params.rows,
+    params.s
   );
   consoleCtrl.setAccentColor(getThemeByName(params.theme).segmentRGB);
   var hideTimeout = null;
@@ -2324,6 +2554,37 @@
     writeParams(params);
     if (appState === "idle") drawIdleFrame();
   };
+  consoleCtrl.onParticlesChange = (n) => {
+    params.n = n;
+    savedTimerN = n;
+    writeParams(params);
+    if (appState === "idle") {
+      sim = new Simulation({
+        numRows: params.rows,
+        totalParticles: params.n,
+        totalTimeSec: params.t,
+        rng
+      });
+      renderer.clearStatic();
+      renderer.resize(params.rows, params.n);
+      drawIdleFrame();
+    }
+  };
+  consoleCtrl.onRowsChange = (rows) => {
+    params.rows = rows;
+    writeParams(params);
+    if (appState === "idle") {
+      sim = new Simulation({
+        numRows: params.rows,
+        totalParticles: params.n,
+        totalTimeSec: params.t,
+        rng
+      });
+      renderer.clearStatic();
+      renderer.resize(params.rows, params.n);
+      drawIdleFrame();
+    }
+  };
   consoleCtrl.onAppModeChange = (mode) => {
     cancelAnimationFrame(rafId);
     timerBridge.reset();
@@ -2360,9 +2621,11 @@
       appState = "idle";
       consoleCtrl.setPaused(true);
       consoleCtrl.setStatus("idle");
-      consoleCtrl.setDurationEnabled(true);
+      consoleCtrl.setConfigEnabled(true);
       consoleCtrl.setTime(params.t * 1e3);
       consoleCtrl.setDuration(params.t);
+      consoleCtrl.setParticles(params.n);
+      consoleCtrl.setRows(params.rows);
       drawIdleFrame();
     }
   };
@@ -2440,7 +2703,7 @@
     appState = "purging";
     consoleCtrl.setStatus("ending");
     consoleCtrl.setPaused(false);
-    consoleCtrl.setDurationEnabled(false);
+    consoleCtrl.setConfigEnabled(false);
     lastTime = null;
     rafId = requestAnimationFrame(frame);
   }
@@ -2458,7 +2721,7 @@
     hopperFadeAlpha = 1;
     appState = "stopping";
     consoleCtrl.setStatus("idle");
-    consoleCtrl.setDurationEnabled(true);
+    consoleCtrl.setConfigEnabled(true);
     lastTime = null;
     rafId = requestAnimationFrame(frame);
   }
@@ -2499,7 +2762,7 @@
     consoleCtrl.setPaused(false);
     consoleCtrl.setStatus("ready");
     consoleCtrl.setTime(params.t * 1e3);
-    consoleCtrl.setDurationEnabled(false);
+    consoleCtrl.setConfigEnabled(false);
     setTimeout(() => {
       if (appState === "running") {
         consoleCtrl.setStatus("running");
@@ -2683,7 +2946,7 @@
       appState = "idle";
       consoleCtrl.setStatus("idle");
       consoleCtrl.setPaused(true);
-      consoleCtrl.setDurationEnabled(true);
+      consoleCtrl.setConfigEnabled(true);
       drawIdleFrame();
     }
   }
@@ -2693,7 +2956,7 @@
     appState = "idle";
     consoleCtrl.setPaused(true);
     consoleCtrl.setStatus("idle");
-    consoleCtrl.setDurationEnabled(true);
+    consoleCtrl.setConfigEnabled(true);
     drawIdleFrame();
   }
 })();
