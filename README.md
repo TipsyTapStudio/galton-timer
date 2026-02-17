@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo-inline.svg" width="360" alt="GALTON-TIMER">
+</p>
+
 # GALTON-TIMER / CLOCK
 **"The Physics of Your Remaining Time."**
 

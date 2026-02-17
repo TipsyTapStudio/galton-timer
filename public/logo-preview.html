@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GALTON-TIMER Logo Preview</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 80px;
+      padding: 60px 40px;
+    }
+    .row.light { background: #ffffff; }
+    .row.dark  { background: #111111; }
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    .card span {
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .row.light span { color: #999; }
+    .row.dark  span { color: #555; }
+    .inline-logo { width: 320px; }
+    .stacked-logo { width: 160px; }
+  </style>
+</head>
+<body>
+  <!-- White background -->
+  <div class="row light">
+    <div class="card">
+      <span>Inline</span>
+      <img class="inline-logo" src="logo-inline.svg" alt="Inline Logo">
+    </div>
+    <div class="card">
+      <span>Stacked</span>
+      <img class="stacked-logo" src="logo-stacked.svg" alt="Stacked Logo">
+    </div>
+  </div>
+  <!-- Black background -->
+  <div class="row dark">
+    <div class="card">
+      <span>Inline</span>
+      <img class="inline-logo" src="logo-inline.svg" alt="Inline Logo">
+    </div>
+    <div class="card">
+      <span>Stacked</span>
+      <img class="stacked-logo" src="logo-stacked.svg" alt="Stacked Logo">
+    </div>
+  </div>
+</body>
+</html>
