@@ -2408,23 +2408,31 @@
     resetBtn.addEventListener("click", () => ctrl.onResetDefaults?.());
     sysSection.appendChild(resetBtn);
     drawerContent.appendChild(sysSection);
+    console.log("[QR DEBUG] Building QR section...");
     const qrSection = document.createElement("div");
-    qrSection.style.cssText = "margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px";
+    qrSection.style.cssText = "margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px;border:2px solid red";
     const qrLabel = document.createElement("span");
     qrLabel.textContent = "Scan to open (Mobile)";
     qrLabel.style.cssText = "font-size:9px;color:#888;letter-spacing:1px";
     qrSection.appendChild(qrLabel);
+    console.log("[QR DEBUG] Calling generateQRSvg...");
+    const svgStr = generateQRSvg("https://tipsytapstudio.github.io/galton-timer/", 140);
+    console.log("[QR DEBUG] SVG string length:", svgStr.length);
+    console.log("[QR DEBUG] SVG starts with:", svgStr.substring(0, 80));
     const qrWrap = document.createElement("div");
-    qrWrap.style.cssText = "width:140px;height:140px;border-radius:4px;overflow:hidden";
-    qrWrap.innerHTML = generateQRSvg("https://tipsytapstudio.github.io/galton-timer/", 140);
+    qrWrap.style.cssText = "width:140px;height:140px;border-radius:4px;overflow:hidden;border:2px solid lime";
+    qrWrap.innerHTML = svgStr;
+    console.log("[QR DEBUG] qrWrap children:", qrWrap.children.length, "firstChild:", qrWrap.firstElementChild?.tagName);
     qrSection.appendChild(qrWrap);
     drawerContent.appendChild(qrSection);
+    console.log("[QR DEBUG] QR section appended to drawerContent. drawerContent children:", drawerContent.children.length);
     drawer.appendChild(drawerContent);
     document.body.appendChild(overlay);
     document.body.appendChild(drawer);
     let drawerOpen = false;
     function toggleDrawer() {
       drawerOpen = !drawerOpen;
+      console.log("[QR DEBUG] toggleDrawer called, drawerOpen:", drawerOpen, "qrSection.isConnected:", qrSection.isConnected, "qrWrap.children:", qrWrap.children.length);
       drawer.classList.toggle("open", drawerOpen);
       overlay.classList.toggle("open", drawerOpen);
       if (drawerOpen) {
