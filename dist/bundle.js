@@ -3798,7 +3798,11 @@
       if (val === initialAppMode) opt.selected = true;
       appSelect.appendChild(opt);
     }
-    appSelect.addEventListener("change", () => ctrl.onAppModeChange?.(appSelect.value));
+    appSelect.addEventListener("change", () => {
+      ctrl.onAppModeChange?.(appSelect.value);
+      updateClockModeVisibility();
+      renderQR();
+    });
     appRow.appendChild(appSelect);
     timerSection.appendChild(appRow);
     const durLabel = document.createElement("div");
@@ -3831,12 +3835,14 @@
       durSlider.value = String(sec);
       durDisplay.value = fmtMmSs(sec);
       ctrl.onDurationChange?.(sec);
+      renderQR();
     }
     durSlider.addEventListener("input", () => {
       const v = parseInt(durSlider.value, 10);
       currentDuration = v;
       durDisplay.value = fmtMmSs(v);
       ctrl.onDurationChange?.(v);
+      renderQR();
     });
     durDisplay.addEventListener("change", () => {
       const parsed = parseMmSs(durDisplay.value);
@@ -3884,6 +3890,7 @@
     csSelect.value = initialCs ? "on" : "off";
     csSelect.addEventListener("change", () => {
       ctrl.onCentisecondsToggle?.(csSelect.value === "on");
+      renderQR();
     });
     csRow.appendChild(csSelect);
     timerSection.appendChild(csRow);
@@ -3903,6 +3910,7 @@
       ctrl.onModeChange?.(physModeSelect.value);
       updateBaseFromPreset();
       syncPhysicsSliders();
+      renderQR();
     });
     physModeRow.appendChild(physModeSelect);
     timerSection.appendChild(physModeRow);
@@ -3943,6 +3951,7 @@
         themeChips.forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
         ctrl.onThemeChange?.(t.name);
+        renderQR();
       });
       themeStrip.appendChild(chip);
       themeChips.push(chip);
@@ -3993,6 +4002,7 @@
       PHYSICS.gravity = v;
       gravVal.textContent = String(Math.round(v));
       ctrl.onGravityChange?.(v);
+      renderQR();
     });
     gravRow.appendChild(gravLabel);
     gravRow.appendChild(gravInput);
@@ -4018,6 +4028,7 @@
       PHYSICS.restitution = v;
       bounceVal.textContent = v.toFixed(2);
       ctrl.onBouncinessChange?.(v);
+      renderQR();
     });
     bounceRow.appendChild(bounceLabel);
     bounceRow.appendChild(bounceInput);
@@ -4043,6 +4054,7 @@
       applyFriction(v);
       fricVal.textContent = `\xD7${v.toFixed(2)}`;
       ctrl.onFrictionChange?.(v);
+      renderQR();
     });
     fricRow.appendChild(fricLabel);
     fricRow.appendChild(fricInput);
@@ -4106,11 +4118,18 @@
     const qrCanvas = document.createElement("canvas");
     qrSection.appendChild(qrCanvas);
     drawerContent.appendChild(qrSection);
+    let qrPending = false;
     function renderQR() {
-      import_qrcode.default.toCanvas(qrCanvas, window.location.href, {
-        width: 140,
-        margin: 2,
-        color: { dark: "#000000", light: "#ffffff" }
+      if (qrPending) return;
+      qrPending = true;
+      requestAnimationFrame(() => {
+        qrPending = false;
+        if (!drawerOpen) return;
+        import_qrcode.default.toCanvas(qrCanvas, window.location.href, {
+          width: 140,
+          margin: 2,
+          color: { dark: "#000000", light: "#ffffff" }
+        });
       });
     }
     drawer.appendChild(drawerContent);
