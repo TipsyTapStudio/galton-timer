@@ -7,6 +7,7 @@
 
 import { PRESETS, PHYSICS, PhysicsParams } from '../engine/simulation';
 import { CLOCK_THEMES } from '../engine/seven-seg';
+import { generateQRSvg } from '../utils/qr-svg';
 import type { AppMode } from '../utils/url-params';
 
 // ── Types ──
@@ -852,7 +853,7 @@ export function createConsole(
 
   drawerContent.appendChild(sysSection);
 
-  // ── QR CODE section (static image — no JS rendering) ──
+  // ── QR CODE section (inline SVG — zero external dependencies) ──
   const qrSection = document.createElement('div');
   qrSection.style.cssText = 'margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px';
 
@@ -861,13 +862,10 @@ export function createConsole(
   qrLabel.style.cssText = 'font-size:9px;color:#888;letter-spacing:1px';
   qrSection.appendChild(qrLabel);
 
-  const qrImg = document.createElement('img');
-  qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://tipsytapstudio.github.io/galton-timer/';
-  qrImg.width = 140;
-  qrImg.height = 140;
-  qrImg.alt = 'QR Code';
-  qrImg.style.cssText = 'border-radius:4px';
-  qrSection.appendChild(qrImg);
+  const qrWrap = document.createElement('div');
+  qrWrap.style.cssText = 'width:140px;height:140px;border-radius:4px;overflow:hidden';
+  qrWrap.innerHTML = generateQRSvg('https://tipsytapstudio.github.io/galton-timer/', 140);
+  qrSection.appendChild(qrWrap);
   drawerContent.appendChild(qrSection);
 
   drawer.appendChild(drawerContent);

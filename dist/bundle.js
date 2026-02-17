@@ -1255,6 +1255,427 @@
     }
   };
 
+  // src/utils/qr-svg.ts
+  var GF_EXP = new Uint8Array(512);
+  var GF_LOG = new Uint8Array(256);
+  (function initGF() {
+    let x = 1;
+    for (let i = 0; i < 255; i++) {
+      GF_EXP[i] = x;
+      GF_LOG[x] = i;
+      x <<= 1;
+      if (x & 256) x ^= 285;
+      x &= 255;
+    }
+    for (let i = 255; i < 512; i++) GF_EXP[i] = GF_EXP[i - 255];
+  })();
+  function gfMul(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return GF_EXP[GF_LOG[a] + GF_LOG[b]];
+  }
+  function gfPolyMul(p, q) {
+    const r = new Array(p.length + q.length - 1).fill(0);
+    for (let i = 0; i < p.length; i++)
+      for (let j = 0; j < q.length; j++)
+        r[i + j] ^= gfMul(p[i], q[j]);
+    return r;
+  }
+  function rsGenerator(n) {
+    let g = [1];
+    for (let i = 0; i < n; i++)
+      g = gfPolyMul(g, [1, GF_EXP[i]]);
+    return g;
+  }
+  function rsEncode(data, ecCount) {
+    const gen = rsGenerator(ecCount);
+    const msg = new Uint8Array(data.length + ecCount);
+    msg.set(data);
+    for (let i = 0; i < data.length; i++) {
+      const c = msg[i];
+      if (c !== 0)
+        for (let j = 0; j < gen.length; j++)
+          msg[i + j] ^= gfMul(gen[j], c);
+    }
+    return msg.slice(data.length);
+  }
+  var EC_M = {
+    1: { total: 16, ecPerBlock: 10, blocks: [[1, 16]] },
+    2: { total: 28, ecPerBlock: 16, blocks: [[1, 28]] },
+    3: { total: 44, ecPerBlock: 26, blocks: [[1, 44]] },
+    4: { total: 64, ecPerBlock: 18, blocks: [[2, 32]] },
+    5: { total: 86, ecPerBlock: 24, blocks: [[2, 43]] },
+    6: { total: 108, ecPerBlock: 16, blocks: [[4, 27]] },
+    7: { total: 124, ecPerBlock: 18, blocks: [[4, 31]] },
+    8: { total: 154, ecPerBlock: 22, blocks: [[2, 38], [2, 39]] },
+    9: { total: 182, ecPerBlock: 22, blocks: [[3, 36], [2, 37]] },
+    10: { total: 216, ecPerBlock: 26, blocks: [[4, 43], [1, 44]] }
+  };
+  var BYTE_CAPACITY = {
+    1: 14,
+    2: 26,
+    3: 42,
+    4: 62,
+    5: 84,
+    6: 106,
+    7: 122,
+    8: 152,
+    9: 180,
+    10: 213
+  };
+  var ALIGN_POS = {
+    1: [],
+    2: [6, 18],
+    3: [6, 22],
+    4: [6, 26],
+    5: [6, 30],
+    6: [6, 34],
+    7: [6, 22, 38],
+    8: [6, 24, 42],
+    9: [6, 26, 46],
+    10: [6, 28, 50]
+  };
+  var FORMAT_STRINGS = [
+    21522,
+    20773,
+    24188,
+    23371,
+    17913,
+    16590,
+    20375,
+    19104
+  ];
+  var BitBuffer = class {
+    constructor() {
+      this.buf = [];
+      this.len = 0;
+    }
+    put(val, bits) {
+      for (let i = bits - 1; i >= 0; i--) {
+        this.buf.push(val >> i & 1);
+        this.len++;
+      }
+    }
+    get length() {
+      return this.len;
+    }
+    getBit(i) {
+      return this.buf[i];
+    }
+    toBytes() {
+      const bytes = new Uint8Array(Math.ceil(this.len / 8));
+      for (let i = 0; i < this.len; i++) {
+        if (this.buf[i]) bytes[i >> 3] |= 128 >> (i & 7);
+      }
+      return bytes;
+    }
+  };
+  function makeMatrix(size) {
+    return Array.from({ length: size }, () => new Uint8Array(size));
+  }
+  function setModule(m, r, c, v) {
+    if (r >= 0 && r < m.length && c >= 0 && c < m.length) m[r][c] = v;
+  }
+  function placeFinder(m, row, col) {
+    for (let r = -1; r <= 7; r++) {
+      for (let c = -1; c <= 7; c++) {
+        const pr = row + r, pc = col + c;
+        if (pr < 0 || pr >= m.length || pc < 0 || pc >= m.length) continue;
+        const inOuter = r >= 0 && r <= 6 && c >= 0 && c <= 6;
+        const ring = r === 0 || r === 6 || c === 0 || c === 6;
+        const inner = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+        m[pr][pc] = inOuter ? ring || inner ? 1 : 0 : 0;
+      }
+    }
+  }
+  function placeAlignment(m, r, c) {
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        const ring = Math.abs(dr) === 2 || Math.abs(dc) === 2;
+        const center = dr === 0 && dc === 0;
+        m[r + dr][c + dc] = ring || center ? 1 : 0;
+      }
+    }
+  }
+  function reserveFormat(m, size) {
+    for (let i = 0; i <= 8; i++) {
+      setModule(m, 8, i, 2);
+      setModule(m, i, 8, 2);
+    }
+    setModule(m, 8, 8, 2);
+    for (let i = 0; i < 8; i++) {
+      setModule(m, size - 1 - i, 8, 2);
+      setModule(m, 8, size - 1 - i, 2);
+    }
+    m[size - 8][8] = 1;
+  }
+  function writeFormat(m, size, maskId) {
+    const fmt = FORMAT_STRINGS[maskId];
+    const bits = [];
+    for (let i = 14; i >= 0; i--) bits.push(fmt >> i & 1);
+    let bi = 0;
+    for (let i = 0; i <= 5; i++) m[8][i] = bits[bi++];
+    m[8][7] = bits[bi++];
+    m[8][8] = bits[bi++];
+    m[7][8] = bits[bi++];
+    for (let i = 5; i >= 0; i--) m[i][8] = bits[bi++];
+    bi = 0;
+    for (let i = 0; i < 8; i++) m[size - 1 - i][8] = bits[bi++];
+    for (let i = 0; i < 7; i++) m[8][size - 7 + i] = bits[bi++];
+  }
+  function buildStructural(version) {
+    const size = version * 4 + 17;
+    const m = makeMatrix(size);
+    const fm = makeMatrix(size);
+    placeFinder(m, 0, 0);
+    placeFinder(m, 0, size - 7);
+    placeFinder(m, size - 7, 0);
+    for (let r = 0; r <= 8; r++) for (let c = 0; c <= 8; c++) fm[r][c] = 1;
+    for (let r = 0; r <= 8; r++) for (let c = size - 8; c < size; c++) fm[r][c] = 1;
+    for (let r = size - 8; r < size; r++) for (let c = 0; c <= 8; c++) fm[r][c] = 1;
+    for (let i = 8; i < size - 8; i++) {
+      const v = i % 2 === 0 ? 1 : 0;
+      m[6][i] = v;
+      fm[6][i] = 1;
+      m[i][6] = v;
+      fm[i][6] = 1;
+    }
+    const ap = ALIGN_POS[version] ?? [];
+    for (const r of ap) {
+      for (const c of ap) {
+        if (fm[r][c]) continue;
+        placeAlignment(m, r, c);
+        for (let dr = -2; dr <= 2; dr++)
+          for (let dc = -2; dc <= 2; dc++)
+            fm[r + dr][c + dc] = 1;
+      }
+    }
+    reserveFormat(m, size);
+    for (let i = 0; i <= 8; i++) {
+      fm[8][i] = 1;
+      fm[i][8] = 1;
+    }
+    for (let i = 0; i < 8; i++) {
+      fm[size - 1 - i][8] = 1;
+      fm[8][size - 1 - i] = 1;
+    }
+    fm[size - 8][8] = 1;
+    return [m, fm];
+  }
+  function embedData(m, fm, bits) {
+    const size = m.length;
+    let idx = 0;
+    let up = true;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let cnt = 0; cnt < size; cnt++) {
+        const row = up ? size - 1 - cnt : cnt;
+        for (let dc = 0; dc < 2; dc++) {
+          const col = right - dc;
+          if (!fm[row][col]) {
+            m[row][col] = idx < bits.length ? bits[idx++] : 0;
+          }
+        }
+      }
+      up = !up;
+    }
+  }
+  function applyMask(m, fm, maskId) {
+    const size = m.length;
+    const masked = makeMatrix(size);
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        masked[r][c] = m[r][c];
+        if (!fm[r][c]) {
+          let flip = false;
+          switch (maskId) {
+            case 0:
+              flip = (r + c) % 2 === 0;
+              break;
+            case 1:
+              flip = r % 2 === 0;
+              break;
+            case 2:
+              flip = c % 3 === 0;
+              break;
+            case 3:
+              flip = (r + c) % 3 === 0;
+              break;
+            case 4:
+              flip = (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+              break;
+            case 5:
+              flip = r * c % 2 + r * c % 3 === 0;
+              break;
+            case 6:
+              flip = (r * c % 2 + r * c % 3) % 2 === 0;
+              break;
+            case 7:
+              flip = ((r + c) % 2 + r * c % 3) % 2 === 0;
+              break;
+          }
+          if (flip) masked[r][c] ^= 1;
+        }
+      }
+    }
+    return masked;
+  }
+  function penaltyScore(m) {
+    const size = m.length;
+    let score = 0;
+    for (let r = 0; r < size; r++) {
+      for (let isRow of [true, false]) {
+        let run = 1;
+        for (let i = 1; i < size; i++) {
+          const cur = isRow ? m[r][i] : m[i][r];
+          const prev = isRow ? m[r][i - 1] : m[i - 1][r];
+          if (cur === prev) {
+            run++;
+            if (run === 5) score += 3;
+            else if (run > 5) score++;
+          } else run = 1;
+        }
+      }
+    }
+    for (let r = 0; r < size - 1; r++)
+      for (let c = 0; c < size - 1; c++)
+        if (m[r][c] === m[r][c + 1] && m[r][c] === m[r + 1][c] && m[r][c] === m[r + 1][c + 1])
+          score += 3;
+    const pat1 = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+    const pat2 = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c <= size - 11; c++) {
+        let m1 = true, m2 = true;
+        for (let k2 = 0; k2 < 11; k2++) {
+          if (m[r][c + k2] !== pat1[k2]) m1 = false;
+          if (m[r][c + k2] !== pat2[k2]) m2 = false;
+        }
+        if (m1 || m2) score += 40;
+      }
+    }
+    for (let c = 0; c < size; c++) {
+      for (let r = 0; r <= size - 11; r++) {
+        let m1 = true, m2 = true;
+        for (let k2 = 0; k2 < 11; k2++) {
+          if (m[r + k2][c] !== pat1[k2]) m1 = false;
+          if (m[r + k2][c] !== pat2[k2]) m2 = false;
+        }
+        if (m1 || m2) score += 40;
+      }
+    }
+    let dark = 0;
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) dark += m[r][c];
+    const pct = dark / (size * size) * 100;
+    const k = Math.floor(Math.abs(pct - 50) / 5);
+    score += k * 10;
+    return score;
+  }
+  function toUtf8(text) {
+    const out = [];
+    for (let i = 0; i < text.length; ) {
+      const cp = text.codePointAt(i);
+      if (cp < 128) {
+        out.push(cp);
+        i += 1;
+      } else if (cp < 2048) {
+        out.push(192 | cp >> 6, 128 | cp & 63);
+        i += 1;
+      } else if (cp < 65536) {
+        out.push(224 | cp >> 12, 128 | cp >> 6 & 63, 128 | cp & 63);
+        i += 1;
+      } else {
+        out.push(240 | cp >> 18, 128 | cp >> 12 & 63, 128 | cp >> 6 & 63, 128 | cp & 63);
+        i += 2;
+      }
+    }
+    return new Uint8Array(out);
+  }
+  function buildCodewords(version, data) {
+    const info = EC_M[version];
+    if (!info) throw new Error(`Unsupported version ${version}`);
+    const bb = new BitBuffer();
+    bb.put(4, 4);
+    bb.put(data.length, 8);
+    for (const byte of data) bb.put(byte, 8);
+    bb.put(0, 4);
+    while (bb.length % 8 !== 0) bb.put(0, 1);
+    const padBytes = [236, 17];
+    let pi = 0;
+    const totalBits = info.total * 8;
+    while (bb.length < totalBits) {
+      bb.put(padBytes[pi & 1], 8);
+      pi++;
+    }
+    const msgBytes = bb.toBytes();
+    const dataBlocks = [];
+    const ecBlocks = [];
+    let offset = 0;
+    for (const [count, blockLen] of info.blocks) {
+      for (let b = 0; b < count; b++) {
+        const block = msgBytes.slice(offset, offset + blockLen);
+        dataBlocks.push(block);
+        ecBlocks.push(rsEncode(block, info.ecPerBlock));
+        offset += blockLen;
+      }
+    }
+    const result = [];
+    const maxDataLen = Math.max(...dataBlocks.map((b) => b.length));
+    for (let i = 0; i < maxDataLen; i++)
+      for (const block of dataBlocks)
+        if (i < block.length) result.push(block[i]);
+    for (let i = 0; i < info.ecPerBlock; i++)
+      for (const ec of ecBlocks)
+        result.push(ec[i]);
+    return result;
+  }
+  function generateQRSvg(url, size, quiet = 4) {
+    const utf8 = toUtf8(url);
+    let version = 1;
+    while (version <= 10 && BYTE_CAPACITY[version] < utf8.length) version++;
+    if (version > 10) throw new Error("Input too long for version 1-10 QR code");
+    const codewords = buildCodewords(version, utf8);
+    const bits = [];
+    for (const cw of codewords) for (let i = 7; i >= 0; i--) bits.push(cw >> i & 1);
+    const remBits = [0, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0];
+    for (let i = 0; i < (remBits[version] ?? 0); i++) bits.push(0);
+    const [baseM, fm] = buildStructural(version);
+    embedData(baseM, fm, bits);
+    let bestMask = 0;
+    let bestScore = Infinity;
+    for (let mask = 0; mask < 8; mask++) {
+      const candidate = applyMask(baseM, fm, mask);
+      writeFormat(candidate, candidate.length, mask);
+      const s = penaltyScore(candidate);
+      if (s < bestScore) {
+        bestScore = s;
+        bestMask = mask;
+      }
+    }
+    const finalM = applyMask(baseM, fm, bestMask);
+    writeFormat(finalM, finalM.length, bestMask);
+    const qSize = finalM.length;
+    const totalModules = qSize + quiet * 2;
+    const moduleSize = size / totalModules;
+    const rects = [];
+    for (let r = 0; r < qSize; r++) {
+      for (let c = 0; c < qSize; c++) {
+        if (finalM[r][c] === 1) {
+          const x = ((c + quiet) * moduleSize).toFixed(2);
+          const y = ((r + quiet) * moduleSize).toFixed(2);
+          const w = (moduleSize + 0.5).toFixed(2);
+          rects.push(`<rect x="${x}" y="${y}" width="${w}" height="${w}"/>`);
+        }
+      }
+    }
+    return [
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`,
+      `<rect width="${size}" height="${size}" fill="white"/>`,
+      `<g fill="black">`,
+      ...rects,
+      `</g>`,
+      `</svg>`
+    ].join("");
+  }
+
   // src/components/console.ts
   function injectStyles() {
     if (document.getElementById("gt-console-style")) return;
@@ -1993,13 +2414,10 @@
     qrLabel.textContent = "Scan to open (Mobile)";
     qrLabel.style.cssText = "font-size:9px;color:#888;letter-spacing:1px";
     qrSection.appendChild(qrLabel);
-    const qrImg = document.createElement("img");
-    qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https://tipsytapstudio.github.io/galton-timer/";
-    qrImg.width = 140;
-    qrImg.height = 140;
-    qrImg.alt = "QR Code";
-    qrImg.style.cssText = "border-radius:4px";
-    qrSection.appendChild(qrImg);
+    const qrWrap = document.createElement("div");
+    qrWrap.style.cssText = "width:140px;height:140px;border-radius:4px;overflow:hidden";
+    qrWrap.innerHTML = generateQRSvg("https://tipsytapstudio.github.io/galton-timer/", 140);
+    qrSection.appendChild(qrWrap);
     drawerContent.appendChild(qrSection);
     drawer.appendChild(drawerContent);
     document.body.appendChild(overlay);
