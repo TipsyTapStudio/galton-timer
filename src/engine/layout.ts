@@ -253,29 +253,29 @@ export function computeHopperGrains(
     row++;
   }
 
-  // Sort so grains nearest the outlet disappear first (V-shaped funnel).
-  // Drawing renders index 0..visibleCount-1, so the END of the array
-  // vanishes first as remaining count decreases.
+  // Sort to simulate real hourglass depletion: the TOP SURFACE caves in
+  // at the center, forming a V-shaped depression. Bottom grains stay packed.
   //
-  // Cone-angle metric: grains directly above the outlet vanish earliest.
-  // atan2-based "cone distance" prioritizes the vertical column above the nozzle.
-  const outletX = cx;
-  const outletY = L.hopperBottom;
-  const totalH = L.hopperBottom - L.hopperTop;
+  // Grains that vanish first (array END) = top-center.
+  // Grains that persist longest (array START) = bottom + edges.
+  //
+  // Score: higher = disappear first.
+  //   - High position (near top) → disappear sooner
+  //   - Center horizontally     → disappear sooner
+  const totalH = L.hopperBottom - L.hopperTop || 1;
   grains.sort((a, b) => {
-    // Normalized vertical distance from outlet (0=at outlet, 1=at top)
-    const tA = (outletY - a.y) / totalH;
-    const tB = (outletY - b.y) / totalH;
-    // Horizontal offset from center, normalized by half-width at that height
+    // How high is this grain? 0=bottom(outlet), 1=top
+    const heightA = (L.hopperBottom - a.y) / totalH;
+    const heightB = (L.hopperBottom - b.y) / totalH;
+    // How centered? 0=edge, 1=dead center
     const hwA = gaussianHW(a.y, L) || 1;
     const hwB = gaussianHW(b.y, L) || 1;
-    const hA = Math.abs(a.x - outletX) / hwA; // 0=center, 1=edge
-    const hB = Math.abs(b.x - outletX) / hwB;
-    // Cone score: lower = closer to outlet center column
-    // Vertical closeness (inverted) + horizontal centering
-    const scoreA = tA + hA * 0.6;
-    const scoreB = tB + hB * 0.6;
-    return scoreB - scoreA; // highest score first (farthest), lowest last (nearest)
+    const centerA = 1 - Math.abs(a.x - cx) / hwA;
+    const centerB = 1 - Math.abs(b.x - cx) / hwB;
+    // Top-center grains get highest score → placed at end → vanish first
+    const scoreA = heightA + centerA * 0.5;
+    const scoreB = heightB + centerB * 0.5;
+    return scoreA - scoreB;
   });
 
   return grains;

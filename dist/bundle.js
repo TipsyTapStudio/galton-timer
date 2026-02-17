@@ -710,19 +710,17 @@
       y -= rowH;
       row++;
     }
-    const outletX = cx;
-    const outletY = L.hopperBottom;
-    const totalH = L.hopperBottom - L.hopperTop;
+    const totalH = L.hopperBottom - L.hopperTop || 1;
     grains.sort((a, b) => {
-      const tA = (outletY - a.y) / totalH;
-      const tB = (outletY - b.y) / totalH;
+      const heightA = (L.hopperBottom - a.y) / totalH;
+      const heightB = (L.hopperBottom - b.y) / totalH;
       const hwA = gaussianHW(a.y, L) || 1;
       const hwB = gaussianHW(b.y, L) || 1;
-      const hA = Math.abs(a.x - outletX) / hwA;
-      const hB = Math.abs(b.x - outletX) / hwB;
-      const scoreA = tA + hA * 0.6;
-      const scoreB = tB + hB * 0.6;
-      return scoreB - scoreA;
+      const centerA = 1 - Math.abs(a.x - cx) / hwA;
+      const centerB = 1 - Math.abs(b.x - cx) / hwB;
+      const scoreA = heightA + centerA * 0.5;
+      const scoreB = heightB + centerB * 0.5;
+      return scoreA - scoreB;
     });
     return grains;
   }
