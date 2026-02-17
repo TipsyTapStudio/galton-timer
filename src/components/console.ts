@@ -397,18 +397,24 @@ function injectStyles(): void {
     }
     .gt-preset-btn {
       flex: 1;
-      padding: 6px 0;
-      border: 1px solid #555;
+      padding: 4px 0;
+      border: 1px solid transparent;
       border-radius: 4px;
-      background: transparent;
-      color: #aaa;
+      background: rgba(255,255,255,0.03);
+      color: rgba(255,255,255,0.28);
       font-size: 11px;
       font-family: monospace;
       cursor: pointer;
-      min-height: 32px;
+      min-height: 26px;
+      transition: all 0.2s;
     }
-    .gt-preset-btn:hover { border-color: #888; color: #fff; }
-    .gt-preset-btn.active { border-color: currentColor; color: currentColor; background: rgba(255,255,255,0.05); }
+    .gt-preset-btn:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.55); }
+    .gt-preset-btn.active {
+      border-color: var(--accent, rgba(255,255,255,0.30));
+      color: var(--accent, rgba(255,255,255,0.80));
+      background: color-mix(in srgb, var(--accent, #fff) 8%, transparent);
+      box-shadow: 0 0 6px color-mix(in srgb, var(--accent, #fff) 15%, transparent);
+    }
     .gt-preset-btn:disabled { opacity: 0.3; cursor: default; }
 
     /* ── Duration disabled hint ── */
@@ -1210,6 +1216,8 @@ export function createConsole(
         btn.style.borderColor = accentBorder;
         btn.style.color = accentColor;
       }
+      // Accent color for preset buttons
+      drawer.style.setProperty('--accent', `rgb(${r},${g},${b})`);
       // Section titles in drawer
       const titles = drawer.querySelectorAll<HTMLElement>('.gt-section-title');
       for (const t of titles) {
