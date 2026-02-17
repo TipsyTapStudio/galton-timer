@@ -5,6 +5,7 @@
  * generous breathing room. Minimal on-screen controls auto-hide after 5s.
  */
 
+import QRCode from 'qrcode';
 import { PRESETS, PHYSICS, PhysicsParams } from '../engine/simulation';
 import { CLOCK_THEMES } from '../engine/seven-seg';
 import type { AppMode } from '../utils/url-params';
@@ -848,6 +849,36 @@ export function createConsole(
   sysSection.appendChild(resetBtn);
 
   drawerContent.appendChild(sysSection);
+
+  // ── QR CODE section ──
+  const qrSection = document.createElement('div');
+  qrSection.style.marginTop = '24px';
+  qrSection.style.paddingTop = '20px';
+  qrSection.style.borderTop = '1px solid #333';
+  qrSection.style.display = 'flex';
+  qrSection.style.flexDirection = 'column';
+  qrSection.style.alignItems = 'center';
+  qrSection.style.gap = '10px';
+
+  const qrLabel = document.createElement('span');
+  qrLabel.textContent = 'Scan to open';
+  qrLabel.style.fontSize = '9px';
+  qrLabel.style.color = '#888';
+  qrLabel.style.letterSpacing = '1px';
+  qrSection.appendChild(qrLabel);
+
+  const qrCanvas = document.createElement('canvas');
+  qrSection.appendChild(qrCanvas);
+  drawerContent.appendChild(qrSection);
+
+  function renderQR(): void {
+    QRCode.toCanvas(qrCanvas, window.location.href, {
+      width: 140,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+  }
+
   drawer.appendChild(drawerContent);
   document.body.appendChild(overlay);
   document.body.appendChild(drawer);
@@ -859,7 +890,7 @@ export function createConsole(
     drawerOpen = !drawerOpen;
     drawer.classList.toggle('open', drawerOpen);
     overlay.classList.toggle('open', drawerOpen);
-    if (drawerOpen) syncPhysicsSliders();
+    if (drawerOpen) { syncPhysicsSliders(); renderQR(); }
   }
 
   function closeDrawer(): void {
