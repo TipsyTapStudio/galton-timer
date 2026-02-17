@@ -132,6 +132,7 @@ consoleCtrl.onCentisecondsToggle = (enabled: boolean) => {
 consoleCtrl.onDurationChange = (sec: number) => {
   params.t = sec;
   writeParams(params);
+  if (appState === 'idle') drawIdleFrame();
 };
 
 consoleCtrl.onAppModeChange = (mode: AppMode) => {
@@ -230,17 +231,19 @@ function startTheLoop(): void {
   renderer.beginPurge();
   appState = 'purging';
   consoleCtrl.setStatus('ending');
+  consoleCtrl.setPaused(false);          // show ⏸ during purge/refill
   consoleCtrl.setDurationEnabled(false);
   lastTime = null;
   rafId = requestAnimationFrame(frame);
 }
 
 function stopToIdle(): void {
+  if (appState === 'idle' || appState === 'stopping') return;
   cancelAnimationFrame(rafId);
   timerBridge.reset();
   renderer.stopAlarm();
   paused = false;
-  consoleCtrl.setPaused(false);
+  consoleCtrl.setPaused(true); // show Start (▶) button in idle
 
   // Fill stacks with binomial distribution
   renderer.fillStacks(params.rows, params.n);
@@ -276,8 +279,17 @@ function beginRefill(): void {
   }
 }
 
+function drawIdleFrame(): void {
+  renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1000);
+}
+
 function startFresh(): void {
-  sim.reset();
+  sim = new Simulation({
+    numRows: params.rows,
+    totalParticles: params.n,
+    totalTimeSec: params.t,
+    rng,
+  });
   renderer.clearStatic();
   renderer.resize(params.rows);
 
@@ -337,7 +349,9 @@ function bakeSettledBatch(particles: import('./engine/simulation').Particle[]): 
 
 window.addEventListener('resize', () => {
   renderer.resize(params.rows);
-  if (paused || sim.allSettled) {
+  if (appState === 'idle') {
+    drawIdleFrame();
+  } else if (paused || sim.allSettled) {
     renderer.drawFrame(
       sim.activeParticles,
       workerRemainingMs / 1000,
@@ -410,7 +424,7 @@ function frame(now: number): void {
 
   if (appState === 'purging') {
     const done = renderer.purgeStacks(dtSec);
-    renderer.drawFrame([], 0, sim.totalParticles, sim.totalParticles, false, sim.totalTimeMs);
+    renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1000);
 
     if (done) {
       beginRefill();
@@ -465,10 +479,11 @@ function frame(now: number): void {
   if (appState === 'stopping') {
     hopperFadeAlpha -= dtSec / 0.3; // 0.3s fade
     renderer.setHopperFadeAlpha(Math.max(0, hopperFadeAlpha));
-    renderer.drawFrame([], 0, sim.totalParticles, sim.totalParticles, false, sim.totalTimeMs);
+    renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1000);
     if (hopperFadeAlpha <= 0) {
       appState = 'idle';
       renderer.resetHopperFade();
+      drawIdleFrame();
       return; // idle — stop loop
     }
     rafId = requestAnimationFrame(frame);
@@ -497,8 +512,15 @@ function frame(now: number): void {
 
   if (!sim.allSettled) {
     rafId = requestAnimationFrame(frame);
+  } else if (!renderer.isAlarmFlashDone()) {
+    rafId = requestAnimationFrame(frame); // keep loop for alarm flash
   } else {
-    consoleCtrl.setStatus('ending');
+    renderer.stopAlarm();
+    appState = 'idle';
+    consoleCtrl.setStatus('idle');
+    consoleCtrl.setPaused(true);        // show ▶
+    consoleCtrl.setDurationEnabled(true);
+    drawIdleFrame();
   }
 }
 

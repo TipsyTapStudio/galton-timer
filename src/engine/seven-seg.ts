@@ -184,6 +184,7 @@ export function drawClock(
   digitH: number,
   theme: ClockTheme,
   centiseconds?: number,
+  showHours?: boolean,
 ): void {
   const hh = Math.floor(totalSec / 3600);
   const mm = Math.floor((totalSec % 3600) / 60);
@@ -205,7 +206,7 @@ export function drawClock(
       [Math.floor(ss / 10), ss % 10],
       [Math.floor(centiseconds / 10), centiseconds % 10],
     ];
-  } else if (hh > 0) {
+  } else if (hh > 0 || showHours) {
     // HH : MM : SS
     groups = [
       [Math.floor(hh / 10), hh % 10],

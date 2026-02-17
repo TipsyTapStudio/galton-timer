@@ -130,13 +130,13 @@ export class Renderer {
 
     if (this.clockEnabled) {
       if (wallClockSec !== undefined) {
-        this.drawSevenSegClock(ctx, wallClockSec, undefined);
+        this.drawSevenSegClock(ctx, wallClockSec, undefined, true);
       } else {
         this.drawSevenSegClock(ctx, remainingSec, centiseconds);
       }
     }
     if (wallClockSec !== undefined) {
-      this.drawInlineTimer(ctx, wallClockSec, undefined);
+      this.drawInlineTimer(ctx, wallClockSec, undefined, true);
     } else {
       this.drawInlineTimer(ctx, remainingSec, centiseconds);
     }
@@ -173,17 +173,17 @@ export class Renderer {
     ctx.fillRect(0, 0, this.layout.width * progress, 2);
   }
 
-  private drawSevenSegClock(ctx: CanvasRenderingContext2D, sec: number, centiseconds?: number): void {
+  private drawSevenSegClock(ctx: CanvasRenderingContext2D, sec: number, centiseconds?: number, showHours?: boolean): void {
     const L = this.layout;
     const digitH = Math.min(L.width * 0.22, L.height * 0.25);
-    drawClock(ctx, Math.floor(sec), L.centerX, L.height / 2, digitH, this.currentTheme, centiseconds);
+    drawClock(ctx, Math.floor(sec), L.centerX, L.height / 2, digitH, this.currentTheme, centiseconds, showHours);
   }
 
-  private drawInlineTimer(ctx: CanvasRenderingContext2D, sec: number, centiseconds?: number): void {
+  private drawInlineTimer(ctx: CanvasRenderingContext2D, sec: number, centiseconds?: number, showHours?: boolean): void {
     if (sec <= 0) return;
     const L = this.layout;
     const digitH = L.height * 0.04;
-    drawClock(ctx, Math.floor(sec), L.centerX, L.inlineTimerY, digitH, this.currentTheme, centiseconds);
+    drawClock(ctx, Math.floor(sec), L.centerX, L.inlineTimerY, digitH, this.currentTheme, centiseconds, showHours);
   }
 
   // ── Rain particles (refill — identical grain rendering) ──
@@ -231,6 +231,11 @@ export class Renderer {
   stopAlarm(): void {
     this.alarmActive = false;
     this.alarmHighlight = false;
+  }
+
+  isAlarmFlashDone(): boolean {
+    if (!this.alarmActive) return true;
+    return this.alarmHighlight;
   }
 
   /** Clear baked grains and reset all state. */

@@ -518,7 +518,7 @@
       ctx.fill();
     }
   }
-  function drawClock(ctx, totalSec, cx, cy, digitH, theme, centiseconds) {
+  function drawClock(ctx, totalSec, cx, cy, digitH, theme, centiseconds, showHours) {
     const hh = Math.floor(totalSec / 3600);
     const mm = Math.floor(totalSec % 3600 / 60);
     const ss = Math.floor(totalSec % 60);
@@ -534,7 +534,7 @@
         [Math.floor(ss / 10), ss % 10],
         [Math.floor(centiseconds / 10), centiseconds % 10]
       ];
-    } else if (hh > 0) {
+    } else if (hh > 0 || showHours) {
       groups = [
         [Math.floor(hh / 10), hh % 10],
         [Math.floor(mm / 10), mm % 10],
@@ -1203,13 +1203,13 @@
       }
       if (this.clockEnabled) {
         if (wallClockSec !== void 0) {
-          this.drawSevenSegClock(ctx, wallClockSec, void 0);
+          this.drawSevenSegClock(ctx, wallClockSec, void 0, true);
         } else {
           this.drawSevenSegClock(ctx, remainingSec, centiseconds);
         }
       }
       if (wallClockSec !== void 0) {
-        this.drawInlineTimer(ctx, wallClockSec, void 0);
+        this.drawInlineTimer(ctx, wallClockSec, void 0, true);
       } else {
         this.drawInlineTimer(ctx, remainingSec, centiseconds);
       }
@@ -1241,16 +1241,16 @@
       ctx.fillStyle = `rgba(${r},${g},${b},0.60)`;
       ctx.fillRect(0, 0, this.layout.width * progress, 2);
     }
-    drawSevenSegClock(ctx, sec, centiseconds) {
+    drawSevenSegClock(ctx, sec, centiseconds, showHours) {
       const L = this.layout;
       const digitH = Math.min(L.width * 0.22, L.height * 0.25);
-      drawClock(ctx, Math.floor(sec), L.centerX, L.height / 2, digitH, this.currentTheme, centiseconds);
+      drawClock(ctx, Math.floor(sec), L.centerX, L.height / 2, digitH, this.currentTheme, centiseconds, showHours);
     }
-    drawInlineTimer(ctx, sec, centiseconds) {
+    drawInlineTimer(ctx, sec, centiseconds, showHours) {
       if (sec <= 0) return;
       const L = this.layout;
       const digitH = L.height * 0.04;
-      drawClock(ctx, Math.floor(sec), L.centerX, L.inlineTimerY, digitH, this.currentTheme, centiseconds);
+      drawClock(ctx, Math.floor(sec), L.centerX, L.inlineTimerY, digitH, this.currentTheme, centiseconds, showHours);
     }
     // ── Rain particles (refill — identical grain rendering) ──
     drawRainParticles(ctx, rainParticles2) {
@@ -1285,6 +1285,10 @@
     stopAlarm() {
       this.alarmActive = false;
       this.alarmHighlight = false;
+    }
+    isAlarmFlashDone() {
+      if (!this.alarmActive) return true;
+      return this.alarmHighlight;
     }
     /** Clear baked grains and reset all state. */
     clearStatic() {
@@ -2288,6 +2292,7 @@
   consoleCtrl.onDurationChange = (sec) => {
     params.t = sec;
     writeParams(params);
+    if (appState === "idle") drawIdleFrame();
   };
   consoleCtrl.onAppModeChange = (mode) => {
     params.app = mode;
@@ -2365,16 +2370,18 @@
     renderer.beginPurge();
     appState = "purging";
     consoleCtrl.setStatus("ending");
+    consoleCtrl.setPaused(false);
     consoleCtrl.setDurationEnabled(false);
     lastTime = null;
     rafId = requestAnimationFrame(frame);
   }
   function stopToIdle() {
+    if (appState === "idle" || appState === "stopping") return;
     cancelAnimationFrame(rafId);
     timerBridge.reset();
     renderer.stopAlarm();
     paused = false;
-    consoleCtrl.setPaused(false);
+    consoleCtrl.setPaused(true);
     renderer.fillStacks(params.rows, params.n);
     renderer.beginHopperFade();
     hopperFadeAlpha = 1;
@@ -2403,8 +2410,16 @@
       });
     }
   }
+  function drawIdleFrame() {
+    renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1e3);
+  }
   function startFresh() {
-    sim.reset();
+    sim = new Simulation({
+      numRows: params.rows,
+      totalParticles: params.n,
+      totalTimeSec: params.t,
+      rng
+    });
     renderer.clearStatic();
     renderer.resize(params.rows);
     workerRemainingMs = params.t * 1e3;
@@ -2449,7 +2464,9 @@
   }
   window.addEventListener("resize", () => {
     renderer.resize(params.rows);
-    if (paused || sim.allSettled) {
+    if (appState === "idle") {
+      drawIdleFrame();
+    } else if (paused || sim.allSettled) {
       renderer.drawFrame(
         sim.activeParticles,
         workerRemainingMs / 1e3,
@@ -2508,7 +2525,7 @@
     lastTime = now;
     if (appState === "purging") {
       const done = renderer.purgeStacks(dtSec);
-      renderer.drawFrame([], 0, sim.totalParticles, sim.totalParticles, false, sim.totalTimeMs);
+      renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1e3);
       if (done) {
         beginRefill();
       }
@@ -2560,10 +2577,11 @@
     if (appState === "stopping") {
       hopperFadeAlpha -= dtSec / 0.3;
       renderer.setHopperFadeAlpha(Math.max(0, hopperFadeAlpha));
-      renderer.drawFrame([], 0, sim.totalParticles, sim.totalParticles, false, sim.totalTimeMs);
+      renderer.drawFrame([], params.t, params.n, params.n, false, params.t * 1e3);
       if (hopperFadeAlpha <= 0) {
         appState = "idle";
         renderer.resetHopperFade();
+        drawIdleFrame();
         return;
       }
       rafId = requestAnimationFrame(frame);
@@ -2587,8 +2605,15 @@
     );
     if (!sim.allSettled) {
       rafId = requestAnimationFrame(frame);
+    } else if (!renderer.isAlarmFlashDone()) {
+      rafId = requestAnimationFrame(frame);
     } else {
-      consoleCtrl.setStatus("ending");
+      renderer.stopAlarm();
+      appState = "idle";
+      consoleCtrl.setStatus("idle");
+      consoleCtrl.setPaused(true);
+      consoleCtrl.setDurationEnabled(true);
+      drawIdleFrame();
     }
   }
   startFresh();
