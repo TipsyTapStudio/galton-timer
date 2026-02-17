@@ -711,16 +711,21 @@
       row++;
     }
     const totalH = L.hopperBottom - L.hopperTop || 1;
+    const tanRepose = 0.55;
+    function grainNoise(g) {
+      const h = ((Math.round(g.x * 73) ^ Math.round(g.y * 137)) & 32767) / 32767;
+      return h * 0.08;
+    }
     grains.sort((a, b) => {
-      const heightA = (L.hopperBottom - a.y) / totalH;
-      const heightB = (L.hopperBottom - b.y) / totalH;
+      const hA = (L.hopperBottom - a.y) / totalH;
+      const hB = (L.hopperBottom - b.y) / totalH;
       const hwA = gaussianHW(a.y, L) || 1;
       const hwB = gaussianHW(b.y, L) || 1;
-      const centerA = 1 - Math.abs(a.x - cx) / hwA;
-      const centerB = 1 - Math.abs(b.x - cx) / hwB;
-      const scoreA = heightA + centerA * 0.5;
-      const scoreB = heightB + centerB * 0.5;
-      return scoreA - scoreB;
+      const offA = Math.abs(a.x - cx) / hwA;
+      const offB = Math.abs(b.x - cx) / hwB;
+      const effA = hA + (1 - offA) * tanRepose + grainNoise(a);
+      const effB = hB + (1 - offB) * tanRepose + grainNoise(b);
+      return effA - effB;
     });
     return grains;
   }

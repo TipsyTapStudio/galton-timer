@@ -253,29 +253,47 @@ export function computeHopperGrains(
     row++;
   }
 
-  // Sort to simulate real hourglass depletion: the TOP SURFACE caves in
-  // at the center, forming a V-shaped depression. Bottom grains stay packed.
+  // Sort to simulate hourglass depletion with angle-of-repose physics.
   //
-  // Grains that vanish first (array END) = top-center.
-  // Grains that persist longest (array START) = bottom + edges.
+  // The surface forms a gentle funnel (mortar shape): center sinks first,
+  // edges follow as the slope exceeds the angle of repose (~30°).
+  // The whole surface descends together, maintaining a smooth concave profile.
   //
-  // Score: higher = disappear first.
-  //   - High position (near top) → disappear sooner
-  //   - Center horizontally     → disappear sooner
+  // Score: higher = disappear first (placed at array END).
+  //
+  // Key insight: imagine a cone whose apex is at the nozzle center and
+  // whose slope is the angle of repose. A grain's "effective height" is
+  // its Y position PLUS a bonus for being near the center (the cone lifts
+  // center grains). This naturally creates a concave surface that respects
+  // the repose angle — edges can't stay much higher than the center.
   const totalH = L.hopperBottom - L.hopperTop || 1;
+  const tanRepose = 0.55; // ~29° — controls how steep the V-shape gets
+
+  // Deterministic noise from grain position (reproducible across frames)
+  function grainNoise(g: HopperGrain): number {
+    const h = ((Math.round(g.x * 73.0) ^ Math.round(g.y * 137.0)) & 0x7fff) / 0x7fff;
+    return h * 0.08; // ~8% noise amplitude
+  }
+
   grains.sort((a, b) => {
-    // How high is this grain? 0=bottom(outlet), 1=top
-    const heightA = (L.hopperBottom - a.y) / totalH;
-    const heightB = (L.hopperBottom - b.y) / totalH;
-    // How centered? 0=edge, 1=dead center
+    // Normalized height: 0 = bottom (outlet), 1 = top
+    const hA = (L.hopperBottom - a.y) / totalH;
+    const hB = (L.hopperBottom - b.y) / totalH;
+
+    // Horizontal offset from center, normalized to [0, 1]
     const hwA = gaussianHW(a.y, L) || 1;
     const hwB = gaussianHW(b.y, L) || 1;
-    const centerA = 1 - Math.abs(a.x - cx) / hwA;
-    const centerB = 1 - Math.abs(b.x - cx) / hwB;
-    // Top-center grains get highest score → placed at end → vanish first
-    const scoreA = heightA + centerA * 0.5;
-    const scoreB = heightB + centerB * 0.5;
-    return scoreA - scoreB;
+    const offA = Math.abs(a.x - cx) / hwA;
+    const offB = Math.abs(b.x - cx) / hwB;
+
+    // "Effective height" = actual height + cone boost for center grains.
+    // Center grains (off≈0) get a large boost → vanish first at any height.
+    // Edge grains (off≈1) get no boost → only vanish when the whole level drops.
+    // The tanRepose factor limits how far ahead center can be from edges.
+    const effA = hA + (1 - offA) * tanRepose + grainNoise(a);
+    const effB = hB + (1 - offB) * tanRepose + grainNoise(b);
+
+    return effA - effB;
   });
 
   return grains;
