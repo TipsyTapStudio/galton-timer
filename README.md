@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo-inline.svg" width="480" alt="GALTON-TIMER">
+  <img src="public/logo-inline.svg" width="640" alt="GALTON-TIMER">
 </p>
 
 # GALTON-TIMER / CLOCK
