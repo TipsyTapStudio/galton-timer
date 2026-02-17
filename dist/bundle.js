@@ -2388,9 +2388,10 @@
       fricVal.textContent = `\xD7${currentFriction.toFixed(2)}`;
     }
     drawerContent.appendChild(physSection);
+    const _qrSvg = generateQRSvg("https://tipsytapstudio.github.io/galton-timer/", 140);
     const sysSection = document.createElement("div");
     sysSection.className = "gt-section";
-    sysSection.innerHTML = '<div class="gt-section-title">System</div>';
+    sysSection.innerHTML = `<div class="gt-section-title">System</div>`;
     const shareBtn = document.createElement("button");
     shareBtn.className = "gt-sys-btn";
     shareBtn.textContent = "Share URL";
@@ -2407,32 +2408,17 @@
     resetBtn.textContent = "Reset to Default";
     resetBtn.addEventListener("click", () => ctrl.onResetDefaults?.());
     sysSection.appendChild(resetBtn);
+    sysSection.insertAdjacentHTML(
+      "beforeend",
+      `<div style="margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px"><span style="font-size:9px;color:#888;letter-spacing:1px">Scan to open (Mobile)</span><div style="width:140px;height:140px;border-radius:4px;overflow:hidden">${_qrSvg}</div></div>`
+    );
     drawerContent.appendChild(sysSection);
-    console.log("[QR DEBUG] Building QR section...");
-    const qrSection = document.createElement("div");
-    qrSection.style.cssText = "margin-top:24px;padding-top:20px;border-top:1px solid #333;display:flex;flex-direction:column;align-items:center;gap:10px;border:2px solid red";
-    const qrLabel = document.createElement("span");
-    qrLabel.textContent = "Scan to open (Mobile)";
-    qrLabel.style.cssText = "font-size:9px;color:#888;letter-spacing:1px";
-    qrSection.appendChild(qrLabel);
-    console.log("[QR DEBUG] Calling generateQRSvg...");
-    const svgStr = generateQRSvg("https://tipsytapstudio.github.io/galton-timer/", 140);
-    console.log("[QR DEBUG] SVG string length:", svgStr.length);
-    console.log("[QR DEBUG] SVG starts with:", svgStr.substring(0, 80));
-    const qrWrap = document.createElement("div");
-    qrWrap.style.cssText = "width:140px;height:140px;border-radius:4px;overflow:hidden;border:2px solid lime";
-    qrWrap.innerHTML = svgStr;
-    console.log("[QR DEBUG] qrWrap children:", qrWrap.children.length, "firstChild:", qrWrap.firstElementChild?.tagName);
-    qrSection.appendChild(qrWrap);
-    drawerContent.appendChild(qrSection);
-    console.log("[QR DEBUG] QR section appended to drawerContent. drawerContent children:", drawerContent.children.length);
     drawer.appendChild(drawerContent);
     document.body.appendChild(overlay);
     document.body.appendChild(drawer);
     let drawerOpen = false;
     function toggleDrawer() {
       drawerOpen = !drawerOpen;
-      console.log("[QR DEBUG] toggleDrawer called, drawerOpen:", drawerOpen, "qrSection.isConnected:", qrSection.isConnected, "qrWrap.children:", qrWrap.children.length);
       drawer.classList.toggle("open", drawerOpen);
       overlay.classList.toggle("open", drawerOpen);
       if (drawerOpen) {
