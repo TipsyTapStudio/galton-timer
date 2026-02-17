@@ -4,7 +4,12 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(python3 -c \" import json with open\\(r''C:\\\\Users\\\\sfchg\\\\.claude\\\\projects\\\\C--Users-sfchg-Desktop-galton-timer\\\\2ef0b688-db36-4a6f-b118-57729da0406c.jsonl'', ''r'', encoding=''utf-8''\\) as f: lines = f.readlines\\(\\) # Find the comprehensive spec message for i, line in enumerate\\(lines\\): try: obj = json.loads\\(line\\) if isinstance\\(obj, dict\\) and obj.get\\(''type''\\) == ''human'': msg = str\\(obj.get\\(''message'', ''''\\)\\) if ''Comprehensive'' in msg or ''包括的'' in msg or ''Production Specification'' in msg: print\\(f''Line {i}: found spec message, length={len\\(msg\\)}''\\) # Print it print\\(msg[:30000]\\) except: pass \")",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(echo:*)"
     ]
   }
 }

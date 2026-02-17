@@ -1,9 +1,15 @@
 /**
  * URL parameter serialization / deserialization.
- * Format: ?t=60&n=2000&s=42&rows=12
+ * Format: ?app=timer&t=3600&n=1024&s=42&rows=24&mode=standard&clock=true&theme=nixie&timerMode=classic&glow=1.0&friction=1.0
  */
 
+import type { TimerMode } from '../engine/renderer';
+
+export type AppMode = 'timer' | 'clock';
+
 export interface AppParams {
+  /** App mode: timer or clock */
+  app: AppMode;
   /** Timer duration in seconds */
   t: number;
   /** Total number of particles */
@@ -12,13 +18,40 @@ export interface AppParams {
   s: number;
   /** Number of peg rows */
   rows: number;
+  /** Physics mode preset name */
+  mode: string;
+  /** Clock display enabled */
+  clock: boolean;
+  /** Color theme name */
+  theme: string;
+  /** Timer display mode */
+  timerMode: TimerMode;
+  /** Glow intensity (0-2) */
+  glow: number;
+  /** Centiseconds display enabled */
+  cs: boolean;
+  /** Friction multiplier for drag values */
+  friction: number;
 }
 
+const VALID_MODES = ['standard', 'heavy sand', 'techno', 'moon gravity', 'super ball'];
+const VALID_THEMES = ['nixie', 'system', 'studio', 'cyber'];
+const VALID_TIMER_MODES: TimerMode[] = ['classic', 'strict', 'seconds', 'off'];
+const VALID_APP_MODES: AppMode[] = ['timer', 'clock'];
+
 const DEFAULTS: AppParams = {
-  t: 60,
-  n: 2000,
+  app: 'timer',
+  t: 3600,
+  n: 1024,
   s: 0,       // 0 means "generate from timestamp"
-  rows: 12,
+  rows: 24,
+  mode: 'standard',
+  clock: false,
+  theme: 'nixie',
+  timerMode: 'classic',
+  glow: 1.0,
+  cs: true,
+  friction: 1.0,
 };
 
 export function readParams(): AppParams {
@@ -35,20 +68,62 @@ export function readParams(): AppParams {
     seed = (Date.now() % 1_000_000) | 1;
   }
 
+  const appRaw = (sp.get('app') || DEFAULTS.app).toLowerCase().trim() as AppMode;
+  const app = VALID_APP_MODES.includes(appRaw) ? appRaw : DEFAULTS.app;
+
+  const modeRaw = (sp.get('mode') || DEFAULTS.mode).toLowerCase().trim();
+  const mode = VALID_MODES.includes(modeRaw) ? modeRaw : DEFAULTS.mode;
+
+  const clockRaw = sp.get('clock');
+  const clock = clockRaw === null ? DEFAULTS.clock : clockRaw !== 'false' && clockRaw !== '0';
+
+  const themeRaw = (sp.get('theme') || DEFAULTS.theme).toLowerCase().trim();
+  const theme = VALID_THEMES.includes(themeRaw) ? themeRaw : DEFAULTS.theme;
+
+  const timerModeRaw = (sp.get('timerMode') || DEFAULTS.timerMode).toLowerCase().trim() as TimerMode;
+  const timerMode = VALID_TIMER_MODES.includes(timerModeRaw) ? timerModeRaw : DEFAULTS.timerMode;
+
+  const glowRaw = sp.get('glow');
+  const glow = glowRaw !== null ? Math.max(0, Math.min(2, parseFloat(glowRaw) || DEFAULTS.glow)) : DEFAULTS.glow;
+
+  const csRaw = sp.get('cs');
+  const cs = csRaw === null ? DEFAULTS.cs : csRaw !== 'false' && csRaw !== '0';
+
+  const frictionRaw = sp.get('friction');
+  const friction = frictionRaw !== null
+    ? Math.max(0.5, Math.min(3.0, parseFloat(frictionRaw) || DEFAULTS.friction))
+    : DEFAULTS.friction;
+
   return {
+    app,
     t: Math.max(1, raw('t', DEFAULTS.t)),
-    n: Math.max(10, raw('n', DEFAULTS.n)),
+    n: Math.max(10, Math.min(3600, raw('n', DEFAULTS.n))),
     s: seed,
-    rows: Math.max(2, Math.min(64, raw('rows', DEFAULTS.rows))),
+    rows: Math.max(4, Math.min(64, raw('rows', DEFAULTS.rows))),
+    mode,
+    clock,
+    theme,
+    timerMode,
+    glow,
+    cs,
+    friction,
   };
 }
 
 export function writeParams(cfg: AppParams): void {
   const sp = new URLSearchParams();
+  sp.set('app', cfg.app);
   sp.set('t', String(cfg.t));
   sp.set('n', String(cfg.n));
   sp.set('s', String(cfg.s));
   sp.set('rows', String(cfg.rows));
+  sp.set('mode', cfg.mode);
+  sp.set('clock', String(cfg.clock));
+  sp.set('theme', cfg.theme);
+  sp.set('timerMode', cfg.timerMode);
+  sp.set('glow', String(cfg.glow));
+  sp.set('cs', String(cfg.cs));
+  sp.set('friction', String(cfg.friction));
   const url = `${window.location.pathname}?${sp.toString()}`;
   window.history.replaceState(null, '', url);
 }

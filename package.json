@@ -1,9 +1,9 @@
 {
   "name": "galton-timer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --format=iife --sourcemap",
+    "build": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --format=iife --sourcemap && esbuild src/workers/timer-worker.ts --bundle --outfile=dist/timer-worker.js --format=iife --sourcemap",
     "dev": "esbuild src/main.ts --bundle --outfile=dist/bundle.js --format=iife --sourcemap --watch=forever --servedir=.",
     "typecheck": "tsc --noEmit"
   },
