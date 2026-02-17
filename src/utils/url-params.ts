@@ -1,6 +1,6 @@
 /**
  * URL parameter serialization / deserialization.
- * Format: ?app=timer&t=3600&n=1024&s=42&rows=24&mode=standard&clock=true&theme=nixie&timerMode=classic&glow=1.0&friction=1.0
+ * Format: ?app=timer&t=3600&n=3600&s=42&rows=24&mode=standard&clock=true&theme=nixie&timerMode=classic&glow=1.0&friction=1.0
  */
 
 import type { TimerMode } from '../engine/renderer';
@@ -42,7 +42,7 @@ const VALID_APP_MODES: AppMode[] = ['timer', 'clock'];
 const DEFAULTS: AppParams = {
   app: 'timer',
   t: 3600,
-  n: 1024,
+  n: 3600,
   s: 0,       // 0 means "generate from timestamp"
   rows: 24,
   mode: 'standard',

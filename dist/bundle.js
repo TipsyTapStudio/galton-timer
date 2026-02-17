@@ -8,7 +8,7 @@
   var DEFAULTS = {
     app: "timer",
     t: 3600,
-    n: 1024,
+    n: 3600,
     s: 0,
     // 0 means "generate from timestamp"
     rows: 24,
