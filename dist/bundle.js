@@ -3770,7 +3770,10 @@
     startBtn.addEventListener("click", () => ctrl.onStart?.());
     pauseBtn.addEventListener("click", () => ctrl.onPause?.());
     stopBtn.addEventListener("click", () => ctrl.onStop?.());
-    settingsBtn.addEventListener("click", () => toggleDrawer());
+    settingsBtn.addEventListener("click", () => {
+      toggleDrawer();
+      setTimeout(() => renderQR(), 150);
+    });
     controls.appendChild(startBtn);
     controls.appendChild(pauseBtn);
     controls.appendChild(stopBtn);
@@ -3801,7 +3804,6 @@
     appSelect.addEventListener("change", () => {
       ctrl.onAppModeChange?.(appSelect.value);
       updateClockModeVisibility();
-      renderQR();
     });
     appRow.appendChild(appSelect);
     timerSection.appendChild(appRow);
@@ -3835,14 +3837,12 @@
       durSlider.value = String(sec);
       durDisplay.value = fmtMmSs(sec);
       ctrl.onDurationChange?.(sec);
-      renderQR();
     }
     durSlider.addEventListener("input", () => {
       const v = parseInt(durSlider.value, 10);
       currentDuration = v;
       durDisplay.value = fmtMmSs(v);
       ctrl.onDurationChange?.(v);
-      renderQR();
     });
     durDisplay.addEventListener("change", () => {
       const parsed = parseMmSs(durDisplay.value);
@@ -3890,7 +3890,6 @@
     csSelect.value = initialCs ? "on" : "off";
     csSelect.addEventListener("change", () => {
       ctrl.onCentisecondsToggle?.(csSelect.value === "on");
-      renderQR();
     });
     csRow.appendChild(csSelect);
     timerSection.appendChild(csRow);
@@ -3910,7 +3909,6 @@
       ctrl.onModeChange?.(physModeSelect.value);
       updateBaseFromPreset();
       syncPhysicsSliders();
-      renderQR();
     });
     physModeRow.appendChild(physModeSelect);
     timerSection.appendChild(physModeRow);
@@ -3951,7 +3949,6 @@
         themeChips.forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
         ctrl.onThemeChange?.(t.name);
-        renderQR();
       });
       themeStrip.appendChild(chip);
       themeChips.push(chip);
@@ -4002,7 +3999,6 @@
       PHYSICS.gravity = v;
       gravVal.textContent = String(Math.round(v));
       ctrl.onGravityChange?.(v);
-      renderQR();
     });
     gravRow.appendChild(gravLabel);
     gravRow.appendChild(gravInput);
@@ -4028,7 +4024,6 @@
       PHYSICS.restitution = v;
       bounceVal.textContent = v.toFixed(2);
       ctrl.onBouncinessChange?.(v);
-      renderQR();
     });
     bounceRow.appendChild(bounceLabel);
     bounceRow.appendChild(bounceInput);
@@ -4054,7 +4049,6 @@
       applyFriction(v);
       fricVal.textContent = `\xD7${v.toFixed(2)}`;
       ctrl.onFrictionChange?.(v);
-      renderQR();
     });
     fricRow.appendChild(fricLabel);
     fricRow.appendChild(fricInput);
@@ -4070,7 +4064,6 @@
       currentFriction = 1;
       applyFriction(1);
       syncPhysicsSliders();
-      renderQR();
     });
     physSection.appendChild(physResetBtn);
     function syncPhysicsSliders() {
@@ -4094,16 +4087,12 @@
       setTimeout(() => {
         shareBtn.textContent = "Share URL";
       }, 1500);
-      renderQR();
     });
     sysSection.appendChild(shareBtn);
     const resetBtn = document.createElement("button");
     resetBtn.className = "gt-sys-btn";
     resetBtn.textContent = "Reset to Default";
-    resetBtn.addEventListener("click", () => {
-      ctrl.onResetDefaults?.();
-      renderQR();
-    });
+    resetBtn.addEventListener("click", () => ctrl.onResetDefaults?.());
     sysSection.appendChild(resetBtn);
     drawerContent.appendChild(sysSection);
     const qrSection = document.createElement("div");
@@ -4123,15 +4112,13 @@
     const qrCanvas = document.createElement("canvas");
     qrSection.appendChild(qrCanvas);
     drawerContent.appendChild(qrSection);
-    function renderQR(attempt = 0) {
-      if (!qrCanvas.isConnected && attempt < 5) {
-        setTimeout(() => renderQR(attempt + 1), 100);
-        return;
-      }
-      import_qrcode.default.toCanvas(qrCanvas, window.location.href, {
-        width: 140,
-        margin: 2,
-        color: { dark: "#000000", light: "#ffffff" }
+    const FALLBACK_URL = "https://tipsytapstudio.github.io/galton-timer/";
+    function renderQR() {
+      const url = window.location.href || FALLBACK_URL;
+      const opts = { width: 140, margin: 2, color: { dark: "#000000", light: "#ffffff" } };
+      import_qrcode.default.toCanvas(qrCanvas, url, opts).catch(() => {
+        import_qrcode.default.toCanvas(qrCanvas, FALLBACK_URL, opts).catch(() => {
+        });
       });
     }
     drawer.appendChild(drawerContent);
@@ -4144,7 +4131,6 @@
       overlay.classList.toggle("open", drawerOpen);
       if (drawerOpen) {
         syncPhysicsSliders();
-        renderQR();
       }
     }
     function closeDrawer() {

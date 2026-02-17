@@ -477,7 +477,10 @@ export function createConsole(
   startBtn.addEventListener('click', () => ctrl.onStart?.());
   pauseBtn.addEventListener('click', () => ctrl.onPause?.());
   stopBtn.addEventListener('click', () => ctrl.onStop?.());
-  settingsBtn.addEventListener('click', () => toggleDrawer());
+  settingsBtn.addEventListener('click', () => {
+    toggleDrawer();
+    setTimeout(() => renderQR(), 150);
+  });
 
   controls.appendChild(startBtn);
   controls.appendChild(pauseBtn);
@@ -520,7 +523,6 @@ export function createConsole(
   appSelect.addEventListener('change', () => {
     ctrl.onAppModeChange?.(appSelect.value as AppMode);
     updateClockModeVisibility();
-    renderQR();
   });
   appRow.appendChild(appSelect);
   timerSection.appendChild(appRow);
@@ -562,7 +564,6 @@ export function createConsole(
     durSlider.value = String(sec);
     durDisplay.value = fmtMmSs(sec);
     ctrl.onDurationChange?.(sec);
-    renderQR();
   }
 
   durSlider.addEventListener('input', () => {
@@ -570,7 +571,6 @@ export function createConsole(
     currentDuration = v;
     durDisplay.value = fmtMmSs(v);
     ctrl.onDurationChange?.(v);
-    renderQR();
   });
 
   durDisplay.addEventListener('change', () => {
@@ -617,7 +617,6 @@ export function createConsole(
   csSelect.value = initialCs ? 'on' : 'off';
   csSelect.addEventListener('change', () => {
     ctrl.onCentisecondsToggle?.(csSelect.value === 'on');
-    renderQR();
   });
   csRow.appendChild(csSelect);
   timerSection.appendChild(csRow);
@@ -639,7 +638,6 @@ export function createConsole(
     ctrl.onModeChange?.(physModeSelect.value);
     updateBaseFromPreset();
     syncPhysicsSliders();
-    renderQR();
   });
   physModeRow.appendChild(physModeSelect);
   timerSection.appendChild(physModeRow);
@@ -691,7 +689,6 @@ export function createConsole(
       themeChips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       ctrl.onThemeChange?.(t.name);
-      renderQR();
     });
     themeStrip.appendChild(chip);
     themeChips.push(chip);
@@ -751,7 +748,6 @@ export function createConsole(
     PHYSICS.gravity = v;
     gravVal.textContent = String(Math.round(v));
     ctrl.onGravityChange?.(v);
-    renderQR();
   });
   gravRow.appendChild(gravLabel);
   gravRow.appendChild(gravInput);
@@ -779,7 +775,6 @@ export function createConsole(
     PHYSICS.restitution = v;
     bounceVal.textContent = v.toFixed(2);
     ctrl.onBouncinessChange?.(v);
-    renderQR();
   });
   bounceRow.appendChild(bounceLabel);
   bounceRow.appendChild(bounceInput);
@@ -807,7 +802,6 @@ export function createConsole(
     applyFriction(v);
     fricVal.textContent = `\u00D7${v.toFixed(2)}`;
     ctrl.onFrictionChange?.(v);
-    renderQR();
   });
   fricRow.appendChild(fricLabel);
   fricRow.appendChild(fricInput);
@@ -825,7 +819,6 @@ export function createConsole(
     currentFriction = 1.0;
     applyFriction(1.0);
     syncPhysicsSliders();
-    renderQR();
   });
   physSection.appendChild(physResetBtn);
 
@@ -852,14 +845,13 @@ export function createConsole(
     ctrl.onShareURL?.();
     shareBtn.textContent = 'Copied!';
     setTimeout(() => { shareBtn.textContent = 'Share URL'; }, 1500);
-    renderQR();
   });
   sysSection.appendChild(shareBtn);
 
   const resetBtn = document.createElement('button');
   resetBtn.className = 'gt-sys-btn';
   resetBtn.textContent = 'Reset to Default';
-  resetBtn.addEventListener('click', () => { ctrl.onResetDefaults?.(); renderQR(); });
+  resetBtn.addEventListener('click', () => ctrl.onResetDefaults?.());
   sysSection.appendChild(resetBtn);
 
   drawerContent.appendChild(sysSection);
@@ -885,15 +877,13 @@ export function createConsole(
   qrSection.appendChild(qrCanvas);
   drawerContent.appendChild(qrSection);
 
-  function renderQR(attempt = 0): void {
-    if (!qrCanvas.isConnected && attempt < 5) {
-      setTimeout(() => renderQR(attempt + 1), 100);
-      return;
-    }
-    QRCode.toCanvas(qrCanvas, window.location.href, {
-      width: 140,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' },
+  const FALLBACK_URL = 'https://tipsytapstudio.github.io/galton-timer/';
+
+  function renderQR(): void {
+    const url = window.location.href || FALLBACK_URL;
+    const opts = { width: 140, margin: 2, color: { dark: '#000000', light: '#ffffff' } };
+    QRCode.toCanvas(qrCanvas, url, opts).catch(() => {
+      QRCode.toCanvas(qrCanvas, FALLBACK_URL, opts).catch(() => {});
     });
   }
 
@@ -908,7 +898,7 @@ export function createConsole(
     drawerOpen = !drawerOpen;
     drawer.classList.toggle('open', drawerOpen);
     overlay.classList.toggle('open', drawerOpen);
-    if (drawerOpen) { syncPhysicsSliders(); renderQR(); }
+    if (drawerOpen) { syncPhysicsSliders(); }
   }
 
   function closeDrawer(): void {
