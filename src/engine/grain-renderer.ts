@@ -180,21 +180,41 @@ export class GrainRenderer {
     ctx.closePath();
     ctx.stroke();
 
-    // ── Grain fill: exact count depletion ──
-    // Cache is bottom-up, so first N grains sit at the bottom.
-    // Rendering only `remaining` grains means top grains disappear first.
+    // ── Grain fill: parabolic surface clipping ──
+    // Instead of drawing first N grains, we compute a U-shaped "water surface"
+    // that drops as grains are emitted. Only grains below the surface are drawn.
     const remaining = Math.max(0, total - emitted);
-    const visibleCount = Math.min(remaining, this.hopperGrainCache.length);
+    const cacheLen = this.hopperGrainCache.length;
 
-    if (visibleCount > 0) {
+    if (remaining > 0 && cacheLen > 0) {
       const r = L.miniGrainR;
+      const ratio = remaining / total;  // 1.0 = full, 0.0 = empty
+
+      // Surface line: surfaceY(x) defines the top of the sand at horizontal position x.
+      // As ratio decreases, the surface drops (surfaceY increases = lower on screen).
+      // The center drops faster than edges → U-shape (parabolic).
+      const hopperH = L.hopperBottom - L.hopperTop;
+      const topHW = L.hopperTopHW;
+
+      // baseLevel: overall surface height. At ratio=1 it's above the hopper top;
+      // at ratio=0 it's below the hopper bottom.
+      const baseLevel = L.hopperTop + hopperH * (1 - ratio) * 1.15;
+
+      // Bowl depth: how much deeper the center is compared to edges.
+      // Increases as sand depletes (more dramatic U-shape).
+      const bowlDepth = hopperH * 0.35 * (1 - ratio);
 
       // Glow pass (batched)
       ctx.fillStyle = this.grainGlowFill;
       ctx.beginPath();
-      for (let i = 0; i < visibleCount; i++) {
+      for (let i = 0; i < cacheLen; i++) {
         const g = this.hopperGrainCache[i];
         if (g.y < -r * 3) continue;
+        // Normalized horizontal offset from center: 0=center, 1=edge
+        const off = Math.min(1, Math.abs(g.x - cx) / topHW);
+        // Parabolic surface: center is deeper (higher Y), edges are higher (lower Y)
+        const surfaceY = baseLevel - bowlDepth * (off * off);
+        if (g.y < surfaceY) continue;  // grain is above surface → hidden
         ctx.moveTo(g.x + r * GRAIN_GLOW_SCALE, g.y);
         ctx.arc(g.x, g.y, r * GRAIN_GLOW_SCALE, 0, PI2);
       }
@@ -203,9 +223,12 @@ export class GrainRenderer {
       // Core pass (batched)
       ctx.fillStyle = this.grainCoreFill;
       ctx.beginPath();
-      for (let i = 0; i < visibleCount; i++) {
+      for (let i = 0; i < cacheLen; i++) {
         const g = this.hopperGrainCache[i];
         if (g.y < -r) continue;
+        const off = Math.min(1, Math.abs(g.x - cx) / topHW);
+        const surfaceY = baseLevel - bowlDepth * (off * off);
+        if (g.y < surfaceY) continue;
         ctx.moveTo(g.x + r, g.y);
         ctx.arc(g.x, g.y, r, 0, PI2);
       }

@@ -710,21 +710,6 @@
       y -= rowH;
       row++;
     }
-    const totalH = L.hopperBottom - L.hopperTop || 1;
-    const bowlDepth = 0.35;
-    grains.sort((a, b) => {
-      const hA = (L.hopperBottom - a.y) / totalH;
-      const hB = (L.hopperBottom - b.y) / totalH;
-      const hwA = gaussianHW(a.y, L) || 1;
-      const hwB = gaussianHW(b.y, L) || 1;
-      const offA = Math.abs(a.x - cx) / hwA;
-      const offB = Math.abs(b.x - cx) / hwB;
-      const bowlA = (1 - offA * offA) * bowlDepth;
-      const bowlB = (1 - offB * offB) * bowlDepth;
-      const nA = ((Math.round(a.x * 73) ^ Math.round(a.y * 137)) & 32767) / 32767 * 0.06;
-      const nB = ((Math.round(b.x * 73) ^ Math.round(b.y * 137)) & 32767) / 32767 * 0.06;
-      return hA + bowlA + nA - (hB + bowlB + nB);
-    });
     return grains;
   }
   function stackJitterX(bin, k, maxJitter) {
@@ -863,23 +848,34 @@
       ctx.closePath();
       ctx.stroke();
       const remaining = Math.max(0, total - emitted);
-      const visibleCount = Math.min(remaining, this.hopperGrainCache.length);
-      if (visibleCount > 0) {
+      const cacheLen = this.hopperGrainCache.length;
+      if (remaining > 0 && cacheLen > 0) {
         const r = L.miniGrainR;
+        const ratio = remaining / total;
+        const hopperH = L.hopperBottom - L.hopperTop;
+        const topHW = L.hopperTopHW;
+        const baseLevel = L.hopperTop + hopperH * (1 - ratio) * 1.15;
+        const bowlDepth = hopperH * 0.35 * (1 - ratio);
         ctx.fillStyle = this.grainGlowFill;
         ctx.beginPath();
-        for (let i = 0; i < visibleCount; i++) {
+        for (let i = 0; i < cacheLen; i++) {
           const g = this.hopperGrainCache[i];
           if (g.y < -r * 3) continue;
+          const off = Math.min(1, Math.abs(g.x - cx) / topHW);
+          const surfaceY = baseLevel - bowlDepth * (off * off);
+          if (g.y < surfaceY) continue;
           ctx.moveTo(g.x + r * GRAIN_GLOW_SCALE, g.y);
           ctx.arc(g.x, g.y, r * GRAIN_GLOW_SCALE, 0, PI2);
         }
         ctx.fill();
         ctx.fillStyle = this.grainCoreFill;
         ctx.beginPath();
-        for (let i = 0; i < visibleCount; i++) {
+        for (let i = 0; i < cacheLen; i++) {
           const g = this.hopperGrainCache[i];
           if (g.y < -r) continue;
+          const off = Math.min(1, Math.abs(g.x - cx) / topHW);
+          const surfaceY = baseLevel - bowlDepth * (off * off);
+          if (g.y < surfaceY) continue;
           ctx.moveTo(g.x + r, g.y);
           ctx.arc(g.x, g.y, r, 0, PI2);
         }

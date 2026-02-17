@@ -1,4 +1,4 @@
-const CACHE_NAME = 'galton-timer-v2';
+const CACHE_NAME = 'galton-timer-v3';
 const ASSETS = [
   './',
   './index.html',
