@@ -253,47 +253,33 @@ export function computeHopperGrains(
     row++;
   }
 
-  // Sort to simulate hourglass depletion with angle-of-repose physics.
+  // Sort for smooth U-shaped (parabolic) bowl depletion.
+  // Center sinks as a gentle curve, not a sharp V-cut.
   //
-  // The surface forms a gentle funnel (mortar shape): center sinks first,
-  // edges follow as the slope exceeds the angle of repose (~30°).
-  // The whole surface descends together, maintaining a smooth concave profile.
-  //
-  // Score: higher = disappear first (placed at array END).
-  //
-  // Key insight: imagine a cone whose apex is at the nozzle center and
-  // whose slope is the angle of repose. A grain's "effective height" is
-  // its Y position PLUS a bonus for being near the center (the cone lifts
-  // center grains). This naturally creates a concave surface that respects
-  // the repose angle — edges can't stay much higher than the center.
+  // Score = height + (1 - xOffset²) * bowlDepth + noise
+  // The x² term creates a parabolic cross-section: center grains get
+  // the largest boost, edges get almost none, and the transition is smooth.
   const totalH = L.hopperBottom - L.hopperTop || 1;
-  const tanRepose = 0.55; // ~29° — controls how steep the V-shape gets
-
-  // Deterministic noise from grain position (reproducible across frames)
-  function grainNoise(g: HopperGrain): number {
-    const h = ((Math.round(g.x * 73.0) ^ Math.round(g.y * 137.0)) & 0x7fff) / 0x7fff;
-    return h * 0.08; // ~8% noise amplitude
-  }
+  const bowlDepth = 0.35; // how much deeper the center sinks vs edges
 
   grains.sort((a, b) => {
-    // Normalized height: 0 = bottom (outlet), 1 = top
     const hA = (L.hopperBottom - a.y) / totalH;
     const hB = (L.hopperBottom - b.y) / totalH;
 
-    // Horizontal offset from center, normalized to [0, 1]
     const hwA = gaussianHW(a.y, L) || 1;
     const hwB = gaussianHW(b.y, L) || 1;
-    const offA = Math.abs(a.x - cx) / hwA;
+    const offA = Math.abs(a.x - cx) / hwA; // 0=center, 1=edge
     const offB = Math.abs(b.x - cx) / hwB;
 
-    // "Effective height" = actual height + cone boost for center grains.
-    // Center grains (off≈0) get a large boost → vanish first at any height.
-    // Edge grains (off≈1) get no boost → only vanish when the whole level drops.
-    // The tanRepose factor limits how far ahead center can be from edges.
-    const effA = hA + (1 - offA) * tanRepose + grainNoise(a);
-    const effB = hB + (1 - offB) * tanRepose + grainNoise(b);
+    // Parabolic bowl: (1 - off²) is 1 at center, 0 at edge, smooth curve
+    const bowlA = (1 - offA * offA) * bowlDepth;
+    const bowlB = (1 - offB * offB) * bowlDepth;
 
-    return effA - effB;
+    // Deterministic noise (~6%)
+    const nA = (((Math.round(a.x * 73) ^ Math.round(a.y * 137)) & 0x7fff) / 0x7fff) * 0.06;
+    const nB = (((Math.round(b.x * 73) ^ Math.round(b.y * 137)) & 0x7fff) / 0x7fff) * 0.06;
+
+    return (hA + bowlA + nA) - (hB + bowlB + nB);
   });
 
   return grains;
