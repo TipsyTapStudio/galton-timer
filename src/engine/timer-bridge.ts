@@ -31,10 +31,6 @@ export class TimerBridge {
     this.worker.postMessage({ type: 'ADD_TIME', addMs });
   }
 
-  adjust(totalMs: number, elapsedMs: number): void {
-    this.worker.postMessage({ type: 'ADJUST', totalMs, elapsedMs });
-  }
-
   pause(): void {
     this.worker.postMessage({ type: 'PAUSE' });
   }

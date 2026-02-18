@@ -85,7 +85,7 @@ export function computeLayout(
   const boardH = numRows > 1 ? (numRows - 1) * rowSpacingY : 0;
 
   // ── Universal grain radius ──
-  const grainRadius = Math.max(2.5, Math.min(8.0, pegSpacing * 0.25));
+  const grainRadius = Math.max(1.2, Math.min(3.5, pegSpacing * 0.09));
   const pegRadius = Math.max(1.5, Math.min(5.0, pegSpacing * 0.12));
 
   // ── Hopper dimensions ──

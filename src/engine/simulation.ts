@@ -306,20 +306,6 @@ export class Simulation {
     this.elapsedMs = ms;
   }
 
-  /** Get current beat index (0-based). */
-  getCurrentBeat(): number {
-    return Math.min(this.totalParticles, Math.floor(this.elapsedMs / this.emitIntervalMs));
-  }
-
-  /** Update BPM (emission rate) while preserving beat position. Returns new totalTimeMs. */
-  updateBpm(newBpm: number): number {
-    const currentBeat = this.getCurrentBeat();
-    this.emitIntervalMs = 60000 / newBpm;
-    this.elapsedMs = currentBeat * this.emitIntervalMs;
-    this.totalTimeMs = this.totalParticles * this.emitIntervalMs;
-    return this.totalTimeMs;
-  }
-
   /** Add time to total duration and recalculate emission interval. */
   addTime(ms: number): void {
     this.totalTimeMs += ms;

@@ -118,7 +118,6 @@ export class Renderer {
     rain?: { x: number; y: number; alpha: number }[],
     centiseconds?: number,
     wallClockSec?: number,
-    beatPhase: number = 0,
   ): void {
     const L = this.layout;
     const ctx = this.gr.dCtx;
@@ -159,7 +158,7 @@ export class Renderer {
       }
     }
 
-    this.gr.drawPegs(ctx, L, this.currentTheme, pegAlpha, beatPhase);
+    this.gr.drawPegs(ctx, L, this.currentTheme, pegAlpha);
     this.gr.drawParticles(ctx, L, particles);
     if (rain && rain.length > 0) {
       this.gr.drawRainParticles(ctx, L, rain, this.currentTheme);
@@ -175,9 +174,8 @@ export class Renderer {
 
   private drawSevenSegClock(ctx: CanvasRenderingContext2D, sec: number, centiseconds?: number, showHours?: boolean): void {
     const L = this.layout;
-    const digitH = Math.min(L.width * 0.14, L.height * 0.16);
-    const bpmY = L.hopperTop - digitH * 0.8;
-    drawClock(ctx, Math.floor(sec), L.centerX, bpmY, digitH, this.currentTheme, centiseconds, showHours);
+    const digitH = Math.min(L.width * 0.22, L.height * 0.25);
+    drawClock(ctx, Math.floor(sec), L.centerX, L.height / 2, digitH, this.currentTheme, centiseconds, showHours);
   }
 
   private drawInlineTimer(ctx: CanvasRenderingContext2D, sec: number, centiseconds?: number, showHours?: boolean): void {

@@ -2,7 +2,7 @@
 (() => {
   // src/utils/url-params.ts
   var VALID_MODES = ["standard", "heavy sand", "techno", "moon gravity", "super ball"];
-  var VALID_THEMES = ["tempo", "nixie", "system", "studio", "cyber"];
+  var VALID_THEMES = ["nixie", "system", "studio", "cyber"];
   var VALID_APP_MODES = ["timer", "clock"];
   var DEFAULTS = {
     app: "timer",
@@ -13,7 +13,7 @@
     rows: 24,
     mode: "standard",
     clock: false,
-    theme: "tempo",
+    theme: "nixie",
     cs: true,
     friction: 1
   };
@@ -286,18 +286,6 @@
     setElapsedMs(ms) {
       this.elapsedMs = ms;
     }
-    /** Get current beat index (0-based). */
-    getCurrentBeat() {
-      return Math.min(this.totalParticles, Math.floor(this.elapsedMs / this.emitIntervalMs));
-    }
-    /** Update BPM (emission rate) while preserving beat position. Returns new totalTimeMs. */
-    updateBpm(newBpm) {
-      const currentBeat = this.getCurrentBeat();
-      this.emitIntervalMs = 6e4 / newBpm;
-      this.elapsedMs = currentBeat * this.emitIntervalMs;
-      this.totalTimeMs = this.totalParticles * this.emitIntervalMs;
-      return this.totalTimeMs;
-    }
     /** Add time to total duration and recalculate emission interval. */
     addTime(ms) {
       this.totalTimeMs += ms;
@@ -397,7 +385,6 @@
     // 9
   ];
   var CLOCK_THEMES = [
-    { name: "Tempo", segmentRGB: [255, 20, 147], grainRGB: [255, 120, 190], glowIntensity: 1.2 },
     { name: "Nixie", segmentRGB: [255, 147, 41], grainRGB: [255, 180, 100], glowIntensity: 1.2 },
     { name: "System", segmentRGB: [0, 255, 65], grainRGB: [120, 255, 140], glowIntensity: 0.8 },
     { name: "Studio", segmentRGB: [220, 220, 230], grainRGB: [230, 230, 240], glowIntensity: 1 },
@@ -587,7 +574,7 @@
     const pegSpacing = Math.min(dxFromWidth, dxFromRatio);
     const rowSpacingY = pegSpacing * SQRT3_2;
     const boardH = numRows > 1 ? (numRows - 1) * rowSpacingY : 0;
-    const grainRadius = Math.max(2.5, Math.min(8, pegSpacing * 0.25));
+    const grainRadius = Math.max(1.2, Math.min(3.5, pegSpacing * 0.09));
     const pegRadius = Math.max(1.5, Math.min(5, pegSpacing * 0.12));
     const nozzleHW = pegSpacing * 0.8;
     const gridHW = numRows * pegSpacing / 2;
@@ -727,7 +714,7 @@
   var PI2 = Math.PI * 2;
   var GRAIN_ALPHA = 0.85;
   var GRAIN_GLOW_ALPHA = 0.06;
-  var GRAIN_GLOW_SCALE = 3;
+  var GRAIN_GLOW_SCALE = 2.5;
   var STATIC_GRAIN_ALPHA = 1;
   var GrainRenderer = class {
     // opaque — for baked stack grains
@@ -918,7 +905,7 @@
       }
       ctx.restore();
     }
-    drawPegs(ctx, L, theme, pegAlphaOverride, beatPhase = 0) {
+    drawPegs(ctx, L, theme, pegAlphaOverride) {
       const [pr, pg, pb] = theme.segmentRGB;
       const alpha = pegAlphaOverride !== void 0 ? pegAlphaOverride : 0.15;
       const themeWeight = pegAlphaOverride !== void 0 && pegAlphaOverride > 0.5 ? 0.6 : 0.3;
@@ -937,37 +924,6 @@
         }
       }
       ctx.fill();
-      if (beatPhase > 0 && pegAlphaOverride === void 0) {
-        const cx = L.centerX;
-        const cy = (L.boardTop + L.boardBottom) / 2;
-        let maxDist = 0;
-        for (let row = 0; row < L.numRows; row++) {
-          for (let j = 0; j <= row; j++) {
-            const px = pegX(L, row, j);
-            const py = pegY(L, row);
-            const d = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
-            if (d > maxDist) maxDist = d;
-          }
-        }
-        if (maxDist < 1) maxDist = 1;
-        const waveRadius = maxDist * beatPhase;
-        const thickness = L.pegSpacing * 1.5;
-        for (let row = 0; row < L.numRows; row++) {
-          for (let j = 0; j <= row; j++) {
-            const px = pegX(L, row, j);
-            const py = pegY(L, row);
-            const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
-            const proximity = 1 - Math.abs(dist - waveRadius) / thickness;
-            if (proximity <= 0) continue;
-            const glowAlpha = proximity * (1 - beatPhase * 0.6) * 0.45;
-            if (glowAlpha <= 0) continue;
-            ctx.fillStyle = `rgba(${pr},${pg},${pb},${glowAlpha.toFixed(3)})`;
-            ctx.beginPath();
-            ctx.arc(px, py, L.pegRadius * 1.8, 0, PI2);
-            ctx.fill();
-          }
-        }
-      }
     }
     drawParticles(ctx, L, particles) {
       if (particles.length === 0) return;
@@ -1228,7 +1184,7 @@
       this.gr.bakeParticle(this.layout, p);
     }
     // ── Frame drawing ──
-    drawFrame(particles, remainingSec, totalParticles, emittedCount, _paused, totalMs, rain, centiseconds, wallClockSec, beatPhase = 0) {
+    drawFrame(particles, remainingSec, totalParticles, emittedCount, _paused, totalMs, rain, centiseconds, wallClockSec) {
       const L = this.layout;
       const ctx = this.gr.dCtx;
       ctx.clearRect(0, 0, L.width, L.height);
@@ -1263,7 +1219,7 @@
           this.alarmHighlight = true;
         }
       }
-      this.gr.drawPegs(ctx, L, this.currentTheme, pegAlpha, beatPhase);
+      this.gr.drawPegs(ctx, L, this.currentTheme, pegAlpha);
       this.gr.drawParticles(ctx, L, particles);
       if (rain && rain.length > 0) {
         this.gr.drawRainParticles(ctx, L, rain, this.currentTheme);
@@ -1277,9 +1233,8 @@
     }
     drawSevenSegClock(ctx, sec, centiseconds, showHours) {
       const L = this.layout;
-      const digitH = Math.min(L.width * 0.14, L.height * 0.16);
-      const bpmY = L.hopperTop - digitH * 0.8;
-      drawClock(ctx, Math.floor(sec), L.centerX, bpmY, digitH, this.currentTheme, centiseconds, showHours);
+      const digitH = Math.min(L.width * 0.22, L.height * 0.25);
+      drawClock(ctx, Math.floor(sec), L.centerX, L.height / 2, digitH, this.currentTheme, centiseconds, showHours);
     }
     drawInlineTimer(ctx, sec, centiseconds, showHours) {
       if (sec <= 0) return;
@@ -1355,9 +1310,6 @@
     }
     addTime(addMs) {
       this.worker.postMessage({ type: "ADD_TIME", addMs });
-    }
-    adjust(totalMs, elapsedMs) {
-      this.worker.postMessage({ type: "ADJUST", totalMs, elapsedMs });
     }
     pause() {
       this.worker.postMessage({ type: "PAUSE" });
@@ -2211,7 +2163,6 @@
     themeStrip.className = "gt-theme-strip";
     const themeChips = [];
     const LED_COLORS = {
-      tempo: "#FF1493",
       nixie: "#FF8C00",
       system: "#00FF41",
       studio: "#FFFFFF",
@@ -2459,6 +2410,12 @@
         }
       },
       setConfigEnabled(enabled) {
+        durSlider.disabled = !enabled;
+        durDisplay.disabled = !enabled;
+        durMinusBtn.disabled = !enabled;
+        durPlusBtn.disabled = !enabled;
+        for (const btn of presetBtns) btn.disabled = !enabled;
+        durHint.style.display = enabled ? "none" : "";
         partSlider.disabled = !enabled;
         partDisplay.disabled = !enabled;
         partMinusBtn.disabled = !enabled;
@@ -2602,13 +2559,7 @@
   consoleCtrl.onDurationChange = (sec) => {
     params.t = sec;
     writeParams(params);
-    if (appState === "idle") {
-      drawIdleFrame();
-    } else if (appState === "running" || appState === "paused") {
-      const bpm = params.n * 60 / sec;
-      const newTotalMs = sim.updateBpm(bpm);
-      timerBridge.adjust(newTotalMs, sim.elapsedMs);
-    }
+    if (appState === "idle") drawIdleFrame();
   };
   consoleCtrl.onParticlesChange = (n) => {
     params.n = n;
@@ -2982,7 +2933,6 @@
     for (const p of settled) {
       renderer.bakeParticle(p);
     }
-    const beatPhase = sim.emitIntervalMs > 0 ? sim.elapsedMs % sim.emitIntervalMs / sim.emitIntervalMs : 0;
     renderer.drawFrame(
       sim.activeParticles,
       workerRemainingMs / 1e3,
@@ -2992,8 +2942,7 @@
       sim.totalTimeMs,
       void 0,
       getCs(),
-      getWallClockSec(),
-      beatPhase
+      getWallClockSec()
     );
     if (!sim.allSettled) {
       rafId = requestAnimationFrame(frame);
