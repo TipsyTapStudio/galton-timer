@@ -29,7 +29,7 @@ export interface AppParams {
 }
 
 const VALID_MODES = ['standard', 'heavy sand', 'techno', 'moon gravity', 'super ball'];
-const VALID_THEMES = ['nixie', 'system', 'studio', 'cyber'];
+const VALID_THEMES = ['tempo', 'nixie', 'system', 'studio', 'cyber'];
 const VALID_APP_MODES: AppMode[] = ['timer', 'clock'];
 
 const DEFAULTS: AppParams = {
@@ -40,7 +40,7 @@ const DEFAULTS: AppParams = {
   rows: 24,
   mode: 'standard',
   clock: false,
-  theme: 'nixie',
+  theme: 'tempo',
   cs: true,
   friction: 1.0,
 };

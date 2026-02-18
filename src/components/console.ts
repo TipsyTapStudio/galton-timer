@@ -950,6 +950,7 @@ export function createConsole(
   const themeChips: HTMLButtonElement[] = [];
 
   const LED_COLORS: Record<string, string> = {
+    tempo:  '#FF1493',
     nixie:  '#FF8C00',
     system: '#00FF41',
     studio: '#FFFFFF',
@@ -1225,13 +1226,7 @@ export function createConsole(
       }
     },
     setConfigEnabled(enabled: boolean) {
-      // Duration
-      durSlider.disabled = !enabled;
-      durDisplay.disabled = !enabled;
-      durMinusBtn.disabled = !enabled;
-      durPlusBtn.disabled = !enabled;
-      for (const btn of presetBtns) btn.disabled = !enabled;
-      durHint.style.display = enabled ? 'none' : '';
+      // Duration: always enabled (live BPM change)
       // Particles
       partSlider.disabled = !enabled;
       partDisplay.disabled = !enabled;

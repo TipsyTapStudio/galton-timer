@@ -152,7 +152,13 @@ consoleCtrl.onCentisecondsToggle = (enabled: boolean) => {
 consoleCtrl.onDurationChange = (sec: number) => {
   params.t = sec;
   writeParams(params);
-  if (appState === 'idle') drawIdleFrame();
+  if (appState === 'idle') {
+    drawIdleFrame();
+  } else if (appState === 'running' || appState === 'paused') {
+    const bpm = params.n * 60 / sec;
+    const newTotalMs = sim.updateBpm(bpm);
+    timerBridge.adjust(newTotalMs, sim.elapsedMs);
+  }
 };
 
 consoleCtrl.onParticlesChange = (n: number) => {
@@ -274,6 +280,7 @@ let lastTime: number | null = null;
 let paused = false;
 let rafId = 0;
 let hopperFadeAlpha = 1;
+let lastBeatIndex = -1;
 
 // Snapshot of hopper state when entering stopping (for visible fade)
 let stoppingEmitted = 0;
@@ -605,6 +612,11 @@ function frame(now: number): void {
     renderer.bakeParticle(p);
   }
 
+  // Beat phase for peg animation
+  const beatPhase = sim.emitIntervalMs > 0
+    ? (sim.elapsedMs % sim.emitIntervalMs) / sim.emitIntervalMs
+    : 0;
+
   renderer.drawFrame(
     sim.activeParticles,
     workerRemainingMs / 1000,
@@ -615,6 +627,7 @@ function frame(now: number): void {
     undefined,
     getCs(),
     getWallClockSec(),
+    beatPhase,
   );
 
   if (!sim.allSettled) {
